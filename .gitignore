@@ -6,3 +6,5 @@ dist/
 downloads/
 browser.json
 *.cookies.txt
+.DS_Store
+*.mp3
