@@ -1,9 +1,10 @@
 # toolsx
 
-`toolsx` packages a small CLI toolbox with two ready-to-use commands:
+`toolsx` packages a small CLI toolbox with a few ready-to-use commands:
 
 - `ytm-dl` - download a single YouTube Music song or a full playlist as tagged MP3 files.
 - `tg-uploader` - upload a file to Telegram with a bot session.
+- `subtitle-extract` - extract video subtitles or auto-captions as UTF-8 JSON, SRT, or text.
 - `toolsx` - list the installed tools and dispatch to a tool by name.
 
 ## Install
@@ -33,6 +34,7 @@ You can also dispatch through the umbrella command:
 ```bash
 toolsx ytm-dl --help
 toolsx tg-uploader --help
+toolsx subtitle-extract --help
 ```
 
 Direct commands stay available too:
@@ -40,7 +42,30 @@ Direct commands stay available too:
 ```bash
 ytm-dl --help
 tg-uploader --help
+subtitle-extract --help
 ```
+
+## subtitle-extract
+
+`subtitle-extract` uses `yt-dlp` metadata to inspect available subtitles, lets you choose a language when needed, and writes UTF-8 output as `json`, `srt`, or `txt`.
+
+Examples:
+
+```bash
+subtitle-extract --url "https://www.youtube.com/watch?v=VIDEO_ID"
+subtitle-extract --id VIDEO_ID --lang en --type srt
+subtitle-extract --url "https://www.youtube.com/watch?v=VIDEO_ID" --lang ar --type txt --output ./captions.txt
+subtitle-extract --url "https://www.youtube.com/watch?v=VIDEO_ID" --cookies-file ./cookies.txt --debug
+subtitle-extract --url "https://www.youtube.com/watch?v=VIDEO_ID" --browser chrome --browser-profile Default
+subtitle-extract --url "https://www.youtube.com/watch?v=VIDEO_ID" --js-runtime bun --js-runtime-path /opt/homebrew/bin/bun
+```
+
+- `--lang` skips the interactive language picker.
+- `--type` defaults to `json`.
+- `--output` defaults to `<video-id>.<type>`.
+- `--cookies-file` and `--browser` support videos that need authenticated subtitle access.
+- `--js-runtime` defaults to `bun`; use `--js-runtime-path` to point yt-dlp at a specific runtime binary.
+- If `--lang` is omitted, the tool shows available languages and prompts you to choose one.
 
 ## ytm-dl
 
@@ -81,6 +106,7 @@ ytm-dl \
 
 - `--cookies-file` uses a `cookies.txt` file instead of browser cookie extraction.
 - `--browser` and `--browser-profile` use cookies directly from a browser when needed.
+- `--js-runtime` defaults to `bun`; `--js-runtime-path` lets yt-dlp use an explicit runtime binary path.
 - `--yes-all` skips the first-song confirmation and downloads the whole playlist immediately.
 - `--output-dir` sets the base export directory; by default files go to `./[Album-Name]`.
 - `--songs-limit` defaults to all songs when omitted.

@@ -20,17 +20,18 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/zaid/toolsx"
-Repository = "https://github.com/zaid/toolsx"
+Homepage = "https://github.com/z44d/toolsx"
+Repository = "https://github.com/z44d/toolsx"
 
 [project.scripts]
 toolsx = "toolsx.cli:main"
 ytm-dl = "ytm_dl:main"
 tg-uploader = "tg_uploader:sync_main"
+subtitle-extract = "subtitle_extractor:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-py-modules = ["ytm_dl", "tg_uploader"]
+py-modules = ["ytm_dl", "tg_uploader", "subtitle_extractor"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

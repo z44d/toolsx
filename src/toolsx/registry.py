@@ -27,6 +27,13 @@ TOOLS: tuple[ToolSpec, ...] = (
         callable_name="sync_main",
         summary="Upload files to Telegram with bot credentials from args, env, or prompts.",
     ),
+    ToolSpec(
+        key="subtitle_extractor",
+        command="subtitle-extract",
+        module="subtitle_extractor",
+        callable_name="main",
+        summary="Extract subtitles with yt-dlp metadata and save them as UTF-8 JSON, SRT, or text.",
+    ),
 )
 
 

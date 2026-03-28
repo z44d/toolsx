@@ -167,6 +167,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--browser-profile", default=None, help="Browser profile name/path"
     )
     parser.add_argument(
+        "--js-runtime",
+        default="bun",
+        help="yt-dlp JS runtime name to prefer (default: bun)",
+    )
+    parser.add_argument(
+        "--js-runtime-path",
+        default=None,
+        help="Optional explicit path for the yt-dlp JS runtime",
+    )
+    parser.add_argument(
         "--test-one", action="store_true", help="Download only the first song"
     )
     parser.add_argument(
@@ -229,6 +239,36 @@ def ensure_binary(name: str) -> str:
         )
         raise SystemExit(1)
     return path
+
+
+def build_js_runtime_option(
+    runtime_name: Optional[str],
+    runtime_path: Optional[str],
+    debug: bool,
+) -> Optional[Dict[str, Dict[str, str]]]:
+    if not runtime_name or not runtime_name.strip():
+        return None
+
+    normalized_name = runtime_name.strip().lower()
+    if normalized_name in {"none", "off", "disable", "disabled"}:
+        debug_log(debug, "JS runtime override disabled")
+        return None
+
+    if runtime_path and runtime_path.strip():
+        resolved_path = Path(runtime_path).expanduser()
+        if not resolved_path.exists():
+            raise FileNotFoundError(f"JS runtime path not found: {resolved_path}")
+        debug_log(debug, f"Using JS runtime {normalized_name} from {resolved_path}")
+        return {normalized_name: {"path": str(resolved_path)}}
+
+    if maybe_binary(normalized_name):
+        debug_log(debug, f"Using JS runtime from PATH: {normalized_name}")
+        return {normalized_name: {}}
+
+    console.print(
+        f"[yellow]{normalized_name} not found on PATH; continuing without a JS runtime override.[/]"
+    )
+    return None
 
 
 def header_lookup(data: Dict[str, Any], key: str) -> Optional[str]:
@@ -708,7 +748,7 @@ def ensure_track_in_archive(archive_path: Path, track: TrackInfo) -> None:
 def download_track(
     track: TrackInfo,
     folder: Path,
-    bun_path: Optional[str],
+    js_runtime: Optional[Dict[str, Dict[str, str]]],
     download_auth: DownloadAuth,
     archive_path: Path,
     progress: Progress,
@@ -766,7 +806,6 @@ def download_track(
     options = cast(
         Dict[str, Any],
         {
-            "format": "bestaudio/best",
             "noplaylist": True,
             "quiet": not debug,
             "no_warnings": not debug,
@@ -789,8 +828,8 @@ def download_track(
             }
         ]
 
-    if bun_path:
-        options["js_runtimes"] = {"bun": {"path": bun_path}}
+    if js_runtime:
+        options["js_runtimes"] = js_runtime
     if download_auth.cookie_file:
         options["cookiefile"] = str(download_auth.cookie_file)
     elif download_auth.cookie_source:
@@ -901,7 +940,7 @@ def process_tracks(
     raw_tracks: List[Dict[str, Any]],
     start_index: int,
     playlist_folder: Path,
-    bun_path: Optional[str],
+    js_runtime: Optional[Dict[str, Dict[str, str]]],
     download_auth: DownloadAuth,
     archive_path: Path,
     include_lyrics: bool,
@@ -962,7 +1001,7 @@ def process_tracks(
                     mp3_path = download_track(
                         track,
                         playlist_folder,
-                        bun_path,
+                        js_runtime,
                         download_auth,
                         archive_path,
                         download_progress,
@@ -1253,7 +1292,7 @@ def run_remaining(
     collection: Dict[str, Any],
     remaining_tracks: List[Dict[str, Any]],
     export_folder: Path,
-    bun_path: Optional[str],
+    js_runtime: Optional[Dict[str, Dict[str, str]]],
     download_auth: DownloadAuth,
     archive_path: Path,
     include_lyrics: bool,
@@ -1269,7 +1308,7 @@ def run_remaining(
         remaining_tracks,
         start_index,
         export_folder,
-        bun_path,
+        js_runtime,
         download_auth,
         archive_path,
         include_lyrics,
@@ -1297,11 +1336,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print_banner()
 
     ffmpeg_path = ensure_binary("ffmpeg")
-    bun_path = maybe_binary("bun")
-    if not bun_path:
-        console.print(
-            "[yellow]bun not found; continuing without a JS runtime override.[/]"
-        )
+    js_runtime = build_js_runtime_option(
+        args.js_runtime,
+        args.js_runtime_path,
+        args.debug,
+    )
     _ = ffmpeg_path
 
     auth_file = Path(args.auth_file).expanduser()
@@ -1360,7 +1399,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         initial_tracks,
         1,
         export_folder,
-        bun_path,
+        js_runtime,
         download_auth,
         archive_path,
         args.lyrics_metadata,
@@ -1392,7 +1431,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 collection,
                 tracks[1:],
                 export_folder,
-                bun_path,
+                js_runtime,
                 download_auth,
                 archive_path,
                 args.lyrics_metadata,
@@ -1425,7 +1464,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 collection,
                 remaining_tracks,
                 export_folder,
-                bun_path,
+                js_runtime,
                 download_auth,
                 archive_path,
                 args.lyrics_metadata,

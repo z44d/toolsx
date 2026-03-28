@@ -1,7 +1,7 @@
 ## AGENTS.md
 
 This repository is a small Python 3.11 CLI toolbox.
-The main entry points are `toolsx`, `ytm-dl`, and `tg-uploader`.
+The main entry points are `toolsx`, `ytm-dl`, `tg-uploader`, and `subtitle-extract`.
 Agents working here should optimize for safe CLI changes, minimal surprise, and clean terminal UX.
 
 ## Repository Facts
@@ -10,7 +10,7 @@ Agents working here should optimize for safe CLI changes, minimal surprise, and 
 - Runtime dependencies are declared in `pyproject.toml` and duplicated in `requirements.txt`.
 - There is no committed `tests/` directory or repo-local lint/format config right now.
 - User-facing CLI docs live in `README.md`; release automation lives in `.github/workflows/publish.yml`.
-- Main code entry points are `src/toolsx/cli.py`, `src/ytm_dl.py`, `src/tg_uploader.py`, and `src/toolsx/registry.py`.
+- Main code entry points are `src/toolsx/cli.py`, `src/ytm_dl.py`, `src/tg_uploader.py`, `src/subtitle_extractor.py`, and `src/toolsx/registry.py`.
 - No Cursor rules were found in `.cursor/rules/` or `.cursorrules`.
 - No Copilot instructions were found in `.github/copilot-instructions.md`.
 
@@ -59,11 +59,13 @@ Because the project is CLI-first, smoke tests matter more than unit tests right 
 - Show tool registry: `./venv/bin/python -m toolsx`
 - Show downloader help: `./venv/bin/python src/ytm_dl.py --help`
 - Show uploader help: `./venv/bin/python src/tg_uploader.py --help`
+- Show subtitle extractor help: `./venv/bin/python src/subtitle_extractor.py --help`
 
 Be careful with end-to-end runs:
 
 - `ytm-dl` downloads network content and writes files.
 - `tg-uploader` uploads real files to Telegram.
+- `subtitle-extract` may access network subtitle endpoints and write local files.
 - Prefer `--help`, argument parsing checks, and isolated helper tests unless the task explicitly requires live network behavior.
 
 ## Release Workflow
