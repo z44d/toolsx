@@ -1,0 +1,7 @@
+kurigram~=2.2.19
+mutagen~=1.47.0
+pyrotgcrypto~=1.2.7
+requests~=2.33.0
+rich~=14.3.3
+yt-dlp[default]~=2026.3.17
+ytmusicapi~=1.11.5
