@@ -3,7 +3,7 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "toolsx"
+name = "tools_extra"
 version = "0.1.0"
 description = "CLI toolbox with YouTube Music downloading and Telegram uploading tools."
 readme = "README.md"

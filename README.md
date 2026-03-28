@@ -9,8 +9,10 @@
 ## Install
 
 ```bash
-pip install toolsx
+pip install tools_extra
 ```
+
+The package is published as `tools_extra`, but the installed CLI commands stay `toolsx`, `ytm-dl`, and `tg-uploader`.
 
 From the repo:
 

@@ -71,15 +71,21 @@ def format_file_date(timestamp: float) -> str:
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Upload a file to Telegram using a bot session.")
+    parser = argparse.ArgumentParser(
+        description="Upload a file to Telegram using a bot session."
+    )
     parser.add_argument("--api-id", help="Telegram API ID")
     parser.add_argument("--api-hash", help="Telegram API hash")
     parser.add_argument("--bot-token", help="Telegram bot token")
     parser.add_argument("--chat-id", help="Target chat ID or username")
     parser.add_argument("--file", dest="file_path", help="Path to the file to upload")
     parser.add_argument("--caption", help="Optional document caption")
-    parser.add_argument("--disable-color", action="store_true", help="Disable ANSI colors")
-    parser.add_argument("--debug", action="store_true", help="Print verbose debug logs for every step")
+    parser.add_argument(
+        "--disable-color", action="store_true", help="Disable ANSI colors"
+    )
+    parser.add_argument(
+        "--debug", action="store_true", help="Print verbose debug logs for every step"
+    )
     return parser.parse_args(argv)
 
 
@@ -91,7 +97,9 @@ def env_value(*names: str) -> Optional[str]:
     return None
 
 
-def prompt_value(label: str, current: Optional[str], env_names: Sequence[str], secret: bool = False) -> str:
+def prompt_value(
+    label: str, current: Optional[str], env_names: Sequence[str], secret: bool = False
+) -> str:
     if current and current.strip():
         return current.strip()
     from_env = env_value(*env_names)
@@ -102,7 +110,11 @@ def prompt_value(label: str, current: Optional[str], env_names: Sequence[str], s
 
 def list_pickable_files(directory: Path) -> list[Path]:
     return sorted(
-        [item for item in directory.iterdir() if item.is_file() and not item.name.startswith(".")],
+        [
+            item
+            for item in directory.iterdir()
+            if item.is_file() and not item.name.startswith(".")
+        ],
         key=lambda item: (item.suffix.lower(), item.name.lower()),
     )
 
@@ -160,11 +172,18 @@ def parse_chat_id(value: str) -> Union[int, str]:
 
 def collect_config(args: argparse.Namespace) -> UploadConfig:
     api_id_raw = prompt_value("API ID", args.api_id, ENV_KEYS["api_id"])
-    api_hash = prompt_value("API hash", args.api_hash, ENV_KEYS["api_hash"], secret=True)
-    bot_token = prompt_value("Bot token", args.bot_token, ENV_KEYS["bot_token"], secret=True)
+    api_hash = prompt_value(
+        "API hash", args.api_hash, ENV_KEYS["api_hash"], secret=True
+    )
+    bot_token = prompt_value(
+        "Bot token", args.bot_token, ENV_KEYS["bot_token"], secret=True
+    )
     chat_id_raw = prompt_value("Chat ID", args.chat_id, ENV_KEYS["chat_id"])
     file_path_raw = prompt_for_file_path(args.file_path)
-    debug_log(args.debug, f"Collected config inputs: api_id={'set' if api_id_raw else 'missing'} api_hash={'set' if api_hash else 'missing'} bot_token={'set' if bot_token else 'missing'} chat_id={chat_id_raw!r} file={file_path_raw!r}")
+    debug_log(
+        args.debug,
+        f"Collected config inputs: api_id={'set' if api_id_raw else 'missing'} api_hash={'set' if api_hash else 'missing'} bot_token={'set' if bot_token else 'missing'} chat_id={chat_id_raw!r} file={file_path_raw!r}",
+    )
 
     if not api_id_raw.isdigit():
         raise ValueError("API ID must be numeric.")
@@ -185,8 +204,12 @@ def collect_config(args: argparse.Namespace) -> UploadConfig:
 
 def print_banner() -> None:
     title = Text("Telegram Uploader", style="bold bright_white")
-    subtitle = Text("Rich bot upload flow with CLI args, env vars, and prompts", style="cyan")
-    console.print(Panel.fit(Text.assemble(title, "\n", subtitle), border_style="bright_blue"))
+    subtitle = Text(
+        "Rich bot upload flow with CLI args, env vars, and prompts", style="cyan"
+    )
+    console.print(
+        Panel.fit(Text.assemble(title, "\n", subtitle), border_style="bright_blue")
+    )
 
 
 def print_upload_plan(config: UploadConfig) -> None:
@@ -209,7 +232,10 @@ async def upload_file(config: UploadConfig, debug: bool) -> None:
 
     print_upload_plan(config)
     console.print("[dim]Connecting to Telegram...[/]")
-    debug_log(debug, f"Preparing Telegram client for chat={config.chat_id!r} file={str(config.file_path)!r} size={file_size}")
+    debug_log(
+        debug,
+        f"Preparing Telegram client for chat={config.chat_id!r} file={str(config.file_path)!r} size={file_size}",
+    )
 
     app = Client(
         name="toolsx_tg_uploader",
@@ -236,7 +262,9 @@ async def upload_file(config: UploadConfig, debug: bool) -> None:
         def update_progress(current: int, total: int) -> None:
             progress.update(task_id, total=max(total, 1), completed=current)
             if debug:
-                console.print(f"[dim]upload progress: {current}/{max(total, 1)} bytes[/]")
+                console.print(
+                    f"[dim]upload progress: {current}/{max(total, 1)} bytes[/]"
+                )
 
         async with app:
             debug_log(debug, "Opening Telegram session")
@@ -260,7 +288,10 @@ async def upload_file(config: UploadConfig, debug: bool) -> None:
                 force_document=True,
                 progress=update_progress,
             )
-            debug_log(debug, f"Upload finished with message id={message.id if message else 'none'}")
+            debug_log(
+                debug,
+                f"Upload finished with message id={message.id if message else 'none'}",
+            )
 
     if message is None:
         raise RuntimeError("Upload stopped before completion.")
@@ -279,7 +310,10 @@ async def async_main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     console = Console(no_color=args.disable_color)
     print_banner()
-    debug_log(args.debug, f"Arguments parsed: file={args.file_path!r} chat_id={args.chat_id!r} disable_color={args.disable_color}")
+    debug_log(
+        args.debug,
+        f"Arguments parsed: file={args.file_path!r} chat_id={args.chat_id!r} disable_color={args.disable_color}",
+    )
 
     try:
         config = collect_config(args)
@@ -287,7 +321,9 @@ async def async_main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
     except ModuleNotFoundError as error:
         if error.name == "pyrogram":
-            console.print("[red]Pyrogram is not installed. Run `pip install -r requirements.txt`.[/]")
+            console.print(
+                "[red]Pyrogram is not installed. Run `pip install -r requirements.txt`.[/]"
+            )
             return 1
         console.print(f"[red]Unexpected error:[/] {error}")
         return 1
@@ -299,7 +335,9 @@ async def async_main(argv: Optional[Sequence[str]] = None) -> int:
         return 130
     except Exception as error:
         if error.__class__.__name__ == "FloodWait" and hasattr(error, "value"):
-            console.print(f"[red]Telegram asked to wait {getattr(error, 'value')} seconds.[/]")
+            console.print(
+                f"[red]Telegram asked to wait {getattr(error, 'value')} seconds.[/]"
+            )
             return 1
         if error.__class__.__module__.startswith("pyrogram"):
             console.print(f"[red]Telegram RPC error:[/] {error}")

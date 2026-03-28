@@ -18,7 +18,9 @@ console = Console()
 def print_tool_list() -> None:
     title = Text("toolsx", style="bold bright_white")
     subtitle = Text("CLI toolbox", style="cyan")
-    console.print(Panel.fit(Text.assemble(title, "\n", subtitle), border_style="bright_blue"))
+    console.print(
+        Panel.fit(Text.assemble(title, "\n", subtitle), border_style="bright_blue")
+    )
 
     table = Table(title="Available Tools", header_style="bold bright_cyan")
     table.add_column("Tool", style="bold white")
@@ -27,7 +29,9 @@ def print_tool_list() -> None:
     for tool in TOOLS:
         table.add_row(tool.key, tool.command, tool.summary)
     console.print(table)
-    console.print("[dim]Run `toolsx <tool>` to dispatch, or call the command directly.[/]")
+    console.print(
+        "[dim]Run `toolsx <tool>` to dispatch, or call the command directly.[/]"
+    )
 
 
 def dispatch(tool_name: str, argv: Sequence[str]) -> int:

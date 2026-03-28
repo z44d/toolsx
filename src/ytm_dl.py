@@ -163,9 +163,15 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--library-index", type=int)
     parser.add_argument("--cookies-file", help="Netscape cookies.txt file for yt-dlp")
     parser.add_argument("--browser", help="Browser name for yt-dlp cookie extraction")
-    parser.add_argument("--browser-profile", default=None, help="Browser profile name/path")
-    parser.add_argument("--test-one", action="store_true", help="Download only the first song")
-    parser.add_argument("--yes-all", action="store_true", help="Skip the first-song confirmation")
+    parser.add_argument(
+        "--browser-profile", default=None, help="Browser profile name/path"
+    )
+    parser.add_argument(
+        "--test-one", action="store_true", help="Download only the first song"
+    )
+    parser.add_argument(
+        "--yes-all", action="store_true", help="Skip the first-song confirmation"
+    )
     parser.add_argument(
         "--songs-limit",
         type=int,
@@ -196,7 +202,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Maximum source bytes per zip archive before splitting into parts",
     )
     parser.add_argument("--non-interactive", action="store_true")
-    parser.add_argument("--debug", action="store_true", help="Print verbose debug logs for every step")
+    parser.add_argument(
+        "--debug", action="store_true", help="Print verbose debug logs for every step"
+    )
     parser.set_defaults(zip_after=None)
     args = parser.parse_args(argv)
 
@@ -216,7 +224,9 @@ def maybe_binary(name: str) -> Optional[str]:
 def ensure_binary(name: str) -> str:
     path = maybe_binary(name)
     if not path:
-        console.print(f"[red]Missing required dependency:[/] `{name}` is not available in PATH.")
+        console.print(
+            f"[red]Missing required dependency:[/] `{name}` is not available in PATH."
+        )
         raise SystemExit(1)
     return path
 
@@ -247,7 +257,9 @@ def build_cookie_file_from_auth(auth_file: Path) -> Optional[Path]:
     if not cookie_jar:
         return None
 
-    handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".cookies.txt", delete=False)
+    handle = tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", suffix=".cookies.txt", delete=False
+    )
     with handle:
         handle.write("# Netscape HTTP Cookie File\n")
         for morsel in cookie_jar.values():
@@ -269,7 +281,11 @@ def resolve_download_auth(args: argparse.Namespace, auth_file: Path) -> Download
         except (OSError, json.JSONDecodeError):
             auth_data = {}
 
-        for key, target in (("user-agent", "User-Agent"), ("referer", "Referer"), ("origin", "Origin")):
+        for key, target in (
+            ("user-agent", "User-Agent"),
+            ("referer", "Referer"),
+            ("origin", "Origin"),
+        ):
             value = header_lookup(auth_data, key)
             if value:
                 headers[target] = value
@@ -285,13 +301,20 @@ def resolve_download_auth(args: argparse.Namespace, auth_file: Path) -> Download
         debug_log(args.debug, f"Using cookies file: {explicit_cookie_file}")
 
     if not cookie_file and args.browser:
-        cookie_source = CookieSource(browser=args.browser.lower(), profile=args.browser_profile)
-        debug_log(args.debug, f"Using browser cookies from {cookie_source.browser} profile={cookie_source.profile!r}")
+        cookie_source = CookieSource(
+            browser=args.browser.lower(), profile=args.browser_profile
+        )
+        debug_log(
+            args.debug,
+            f"Using browser cookies from {cookie_source.browser} profile={cookie_source.profile!r}",
+        )
 
     if auth_file.exists():
         debug_log(args.debug, f"Loaded auth file: {auth_file}")
 
-    return DownloadAuth(cookie_source=cookie_source, cookie_file=cookie_file, http_headers=headers)
+    return DownloadAuth(
+        cookie_source=cookie_source, cookie_file=cookie_file, http_headers=headers
+    )
 
 
 def ensure_ytmusic(auth_file: Path) -> YTMusic:
@@ -337,12 +360,20 @@ def infer_target_from_value(value: str) -> TargetSpec:
     if parsed.scheme:
         query = parse_qs(parsed.query)
         if query.get("list"):
-            return TargetSpec(kind="playlist", identifier=playlist_id_from_url(value), source_label="playlist URL")
-        return TargetSpec(kind="song", identifier=song_id_from_url(value), source_label="song URL")
+            return TargetSpec(
+                kind="playlist",
+                identifier=playlist_id_from_url(value),
+                source_label="playlist URL",
+            )
+        return TargetSpec(
+            kind="song", identifier=song_id_from_url(value), source_label="song URL"
+        )
 
     stripped = value.strip()
     if is_playlist_identifier(stripped):
-        return TargetSpec(kind="playlist", identifier=stripped, source_label="playlist ID")
+        return TargetSpec(
+            kind="playlist", identifier=stripped, source_label="playlist ID"
+        )
     return TargetSpec(kind="song", identifier=stripped, source_label="song ID")
 
 
@@ -378,15 +409,27 @@ def require_library_auth(auth_file: Path) -> None:
     raise SystemExit(1)
 
 
-def choose_target(args: argparse.Namespace, auth_file: Path, ytmusic: YTMusic) -> TargetSpec:
+def choose_target(
+    args: argparse.Namespace, auth_file: Path, ytmusic: YTMusic
+) -> TargetSpec:
     if args.song_id:
         return TargetSpec(kind="song", identifier=args.song_id, source_label="song ID")
     if args.song_url:
-        return TargetSpec(kind="song", identifier=song_id_from_url(args.song_url), source_label="song URL")
+        return TargetSpec(
+            kind="song",
+            identifier=song_id_from_url(args.song_url),
+            source_label="song URL",
+        )
     if args.playlist_id:
-        return TargetSpec(kind="playlist", identifier=args.playlist_id, source_label="playlist ID")
+        return TargetSpec(
+            kind="playlist", identifier=args.playlist_id, source_label="playlist ID"
+        )
     if args.playlist_url:
-        return TargetSpec(kind="playlist", identifier=playlist_id_from_url(args.playlist_url), source_label="playlist URL")
+        return TargetSpec(
+            kind="playlist",
+            identifier=playlist_id_from_url(args.playlist_url),
+            source_label="playlist URL",
+        )
     if args.url:
         return infer_target_from_value(args.url)
     if args.id:
@@ -397,7 +440,11 @@ def choose_target(args: argparse.Namespace, auth_file: Path, ytmusic: YTMusic) -
         if args.library_index < 1 or args.library_index > len(choices):
             console.print("[red]Library index is out of range.[/]")
             raise SystemExit(1)
-        return TargetSpec(kind="playlist", identifier=choices[args.library_index - 1].playlist_id, source_label="library")
+        return TargetSpec(
+            kind="playlist",
+            identifier=choices[args.library_index - 1].playlist_id,
+            source_label="library",
+        )
 
     if args.non_interactive:
         console.print(
@@ -437,7 +484,9 @@ def choose_target(args: argparse.Namespace, auth_file: Path, ytmusic: YTMusic) -
             console.print("[red]Invalid playlist selection.[/]")
             raise SystemExit(1)
         chosen = library_choices[selection - 1]
-        return TargetSpec(kind="playlist", identifier=chosen.playlist_id, source_label="library")
+        return TargetSpec(
+            kind="playlist", identifier=chosen.playlist_id, source_label="library"
+        )
 
     raw_value = Prompt.ask("Song or playlist URL / ID")
     return infer_target_from_value(raw_value)
@@ -481,7 +530,9 @@ def get_song_collection(ytmusic: YTMusic, video_id: str) -> Dict[str, Any]:
 def best_thumbnail_url(thumbnails: Optional[List[Dict[str, Any]]]) -> Optional[str]:
     if not thumbnails:
         return None
-    best = max(thumbnails, key=lambda item: item.get("width", 0) * item.get("height", 0))
+    best = max(
+        thumbnails, key=lambda item: item.get("width", 0) * item.get("height", 0)
+    )
     url = best.get("url")
     if not url:
         return None
@@ -515,7 +566,9 @@ def fetch_lyrics_text(ytmusic: YTMusic, video_id: str, debug: bool) -> Optional[
         if not isinstance(lyrics_browse_id, str) or not lyrics_browse_id:
             debug_log(debug, f"No lyrics browse id found for {video_id}")
             return None
-        debug_log(debug, f"Fetching lyrics payload for {video_id} browseId={lyrics_browse_id}")
+        debug_log(
+            debug, f"Fetching lyrics payload for {video_id} browseId={lyrics_browse_id}"
+        )
         lyrics_payload = ytmusic.get_lyrics(lyrics_browse_id, timestamps=True)
     except Exception as exc:
         debug_log(debug, f"Lyrics fetch failed for {video_id}: {exc}")
@@ -588,11 +641,17 @@ def build_track_info(
     thumbnail_candidates = [
         extract_thumbnail_list(details.get("thumbnail")),
         extract_thumbnail_list(details.get("videoDetails", {}).get("thumbnail")),
-        extract_thumbnail_list(details.get("microformat", {}).get("microformatDataRenderer", {}).get("thumbnail")),
+        extract_thumbnail_list(
+            details.get("microformat", {})
+            .get("microformatDataRenderer", {})
+            .get("thumbnail")
+        ),
         extract_thumbnail_list(raw_track.get("thumbnails")),
         extract_thumbnail_list(raw_track.get("thumbnail")),
     ]
-    thumbnail_url = best_thumbnail_url(next((item for item in thumbnail_candidates if item), None))
+    thumbnail_url = best_thumbnail_url(
+        next((item for item in thumbnail_candidates if item), None)
+    )
     debug_log(debug, f"Thumbnail for {video_id}: {thumbnail_url or 'none'}")
 
     return TrackInfo(
@@ -608,11 +667,15 @@ def build_track_info(
             or 0
         ),
         thumbnail_url=thumbnail_url,
-        lyrics_text=fetch_lyrics_text(ytmusic, video_id, debug) if include_lyrics else None,
+        lyrics_text=fetch_lyrics_text(ytmusic, video_id, debug)
+        if include_lyrics
+        else None,
     )
 
 
-def fetch_thumbnail(url: Optional[str], temp_dir: Path, video_id: str, debug: bool) -> Optional[Path]:
+def fetch_thumbnail(
+    url: Optional[str], temp_dir: Path, video_id: str, debug: bool
+) -> Optional[Path]:
     if not url:
         debug_log(debug, f"No thumbnail URL for {video_id}")
         return None
@@ -634,7 +697,9 @@ def fetch_thumbnail(url: Optional[str], temp_dir: Path, video_id: str, debug: bo
 def ensure_track_in_archive(archive_path: Path, track: TrackInfo) -> None:
     archive_path.parent.mkdir(parents=True, exist_ok=True)
     line = f"youtube {track.video_id}\n"
-    if archive_path.exists() and line in archive_path.read_text(encoding="utf-8", errors="ignore").splitlines(keepends=True):
+    if archive_path.exists() and line in archive_path.read_text(
+        encoding="utf-8", errors="ignore"
+    ).splitlines(keepends=True):
         return
     with archive_path.open("a", encoding="utf-8") as archive_file:
         archive_file.write(line)
@@ -652,7 +717,9 @@ def download_track(
     mp3_bitrate: int,
     debug: bool,
 ) -> Path:
-    stem = sanitize_filename(f"{track.track_number:03d} - {track.title} [{track.video_id}]")
+    stem = sanitize_filename(
+        f"{track.track_number:03d} - {track.title} [{track.video_id}]"
+    )
     target = folder / (f"{stem}.audio" if keep_original_audio else f"{stem}.mp3")
 
     if not keep_original_audio and target.exists():
@@ -662,9 +729,16 @@ def download_track(
 
     if keep_original_audio:
         existing_matches = sorted(folder.glob(f"*{track.video_id}*.*"))
-        media_matches = [path for path in existing_matches if path.suffix.lower() not in {".txt", ".jpg", ".jpeg", ".png"}]
+        media_matches = [
+            path
+            for path in existing_matches
+            if path.suffix.lower() not in {".txt", ".jpg", ".jpeg", ".png"}
+        ]
         if media_matches:
-            debug_log(debug, f"Reusing existing media file for {track.video_id}: {media_matches[0]}")
+            debug_log(
+                debug,
+                f"Reusing existing media file for {track.video_id}: {media_matches[0]}",
+            )
             ensure_track_in_archive(archive_path, track)
             progress.advance(overall_task, 1)
             return media_matches[0]
@@ -681,7 +755,9 @@ def download_track(
             downloaded = data.get("downloaded_bytes", 0)
             progress.update(current_task, total=total, completed=downloaded)
             if debug:
-                console.print(f"[dim]yt-dlp progress {track.video_id}: {downloaded}/{total or '?'} bytes[/]")
+                console.print(
+                    f"[dim]yt-dlp progress {track.video_id}: {downloaded}/{total or '?'} bytes[/]"
+                )
         elif status == "finished":
             total = data.get("total_bytes") or data.get("downloaded_bytes") or 1
             progress.update(current_task, total=total, completed=total)
@@ -706,12 +782,12 @@ def download_track(
     if not keep_original_audio:
         options["final_ext"] = "mp3"
         options["postprocessors"] = [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": str(mp3_bitrate),
-                }
-            ]
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": str(mp3_bitrate),
+            }
+        ]
 
     if bun_path:
         options["js_runtimes"] = {"bun": {"path": bun_path}}
@@ -728,19 +804,32 @@ def download_track(
         options["http_headers"] = download_auth.http_headers
 
     try:
-        debug_log(debug, f"Starting yt-dlp for {track.video_id} keep_original_audio={keep_original_audio} mp3_bitrate={mp3_bitrate}")
+        debug_log(
+            debug,
+            f"Starting yt-dlp for {track.video_id} keep_original_audio={keep_original_audio} mp3_bitrate={mp3_bitrate}",
+        )
         with YoutubeDL(options) as ydl:  # type: ignore[arg-type]
-            ydl.extract_info(f"https://www.youtube.com/watch?v={track.video_id}", download=True)
+            ydl.extract_info(
+                f"https://www.youtube.com/watch?v={track.video_id}", download=True
+            )
     except DownloadError as exc:
         raise RuntimeError(f"Failed to download {track.title}: {exc}") from exc
     finally:
         progress.remove_task(current_task)
 
     if not target.exists():
-        pattern = f"*{track.video_id}*.*" if keep_original_audio else f"*{track.video_id}*.mp3"
+        pattern = (
+            f"*{track.video_id}*.*"
+            if keep_original_audio
+            else f"*{track.video_id}*.mp3"
+        )
         matches = sorted(folder.glob(pattern))
         if keep_original_audio:
-            matches = [path for path in matches if path.suffix.lower() not in {".txt", ".jpg", ".jpeg", ".png"}]
+            matches = [
+                path
+                for path in matches
+                if path.suffix.lower() not in {".txt", ".jpg", ".jpeg", ".png"}
+            ]
         if matches:
             target = matches[0]
     if not target.exists():
@@ -797,7 +886,9 @@ def print_run_summary(result: DownloadRunResult) -> None:
     if result.failures:
         console.print(
             Panel(
-                "\n".join(f"{failure.label}: {failure.message}" for failure in result.failures),
+                "\n".join(
+                    f"{failure.label}: {failure.message}" for failure in result.failures
+                ),
                 title="Failed to Download",
                 border_style="red",
             )
@@ -825,25 +916,32 @@ def process_tracks(
     with tempfile.TemporaryDirectory(prefix="ytm-artwork-") as temp_dir_name:
         temp_dir = Path(temp_dir_name)
 
-        with Progress(
-            SpinnerColumn(style="cyan"),
-            TextColumn("[bold cyan]{task.description}"),
-            BarColumn(bar_width=36),
-            TaskProgressColumn(),
-            DownloadColumn(),
-            TransferSpeedColumn(),
-            TimeElapsedColumn(),
-            console=console,
-        ) as download_progress, Progress(
-            SpinnerColumn(style="magenta"),
-            TextColumn("[bold magenta]{task.description}"),
-            BarColumn(bar_width=36),
-            TaskProgressColumn(),
-            TimeRemainingColumn(),
-            console=console,
-        ) as metadata_progress:
-            download_overall = download_progress.add_task("Downloading tracks", total=len(raw_tracks))
-            metadata_overall = metadata_progress.add_task("Updating metadata", total=len(raw_tracks))
+        with (
+            Progress(
+                SpinnerColumn(style="cyan"),
+                TextColumn("[bold cyan]{task.description}"),
+                BarColumn(bar_width=36),
+                TaskProgressColumn(),
+                DownloadColumn(),
+                TransferSpeedColumn(),
+                TimeElapsedColumn(),
+                console=console,
+            ) as download_progress,
+            Progress(
+                SpinnerColumn(style="magenta"),
+                TextColumn("[bold magenta]{task.description}"),
+                BarColumn(bar_width=36),
+                TaskProgressColumn(),
+                TimeRemainingColumn(),
+                console=console,
+            ) as metadata_progress,
+        ):
+            download_overall = download_progress.add_task(
+                "Downloading tracks", total=len(raw_tracks)
+            )
+            metadata_overall = metadata_progress.add_task(
+                "Updating metadata", total=len(raw_tracks)
+            )
 
             for offset, raw_track in enumerate(raw_tracks, start=start_index):
                 track: Optional[TrackInfo] = None
@@ -857,7 +955,10 @@ def process_tracks(
                         debug,
                     )
                     assert track is not None
-                    debug_log(debug, f"Prepared track {track.video_id}: title={track.title!r} album={track.album!r}")
+                    debug_log(
+                        debug,
+                        f"Prepared track {track.video_id}: title={track.title!r} album={track.album!r}",
+                    )
                     mp3_path = download_track(
                         track,
                         playlist_folder,
@@ -871,16 +972,32 @@ def process_tracks(
                         debug,
                     )
                     if keep_original_audio:
-                        debug_log(debug, f"Skipping metadata/tagging for {track.video_id} because keep-original-audio is enabled")
+                        debug_log(
+                            debug,
+                            f"Skipping metadata/tagging for {track.video_id} because keep-original-audio is enabled",
+                        )
                         metadata_progress.advance(metadata_overall, 1)
                     else:
-                        thumbnail_path = fetch_thumbnail(track.thumbnail_url, temp_dir, track.video_id, debug)
-                        apply_metadata(track, mp3_path, thumbnail_path, metadata_progress, metadata_overall, debug)
+                        thumbnail_path = fetch_thumbnail(
+                            track.thumbnail_url, temp_dir, track.video_id, debug
+                        )
+                        apply_metadata(
+                            track,
+                            mp3_path,
+                            thumbnail_path,
+                            metadata_progress,
+                            metadata_overall,
+                            debug,
+                        )
                         debug_log(debug, f"Applied metadata for {track.video_id}")
                     downloaded_files.append(mp3_path)
                     downloaded_tracks.append(format_track_label(track))
                 except Exception as exc:
-                    label = format_track_label(track) if track else str(raw_track.get("title") or f"Track {offset}")
+                    label = (
+                        format_track_label(track)
+                        if track
+                        else str(raw_track.get("title") or f"Track {offset}")
+                    )
                     failures.append(TrackFailure(label=label, message=str(exc)))
                     download_progress.advance(download_overall, 1)
                     metadata_progress.advance(metadata_overall, 1)
@@ -916,7 +1033,9 @@ def apply_metadata(
     ]
 
     if thumbnail_path:
-        command.extend(["-i", str(thumbnail_path), "-map", "0:a", "-map", "1:v", "-c:v", "mjpeg"])
+        command.extend(
+            ["-i", str(thumbnail_path), "-map", "0:a", "-map", "1:v", "-c:v", "mjpeg"]
+        )
     else:
         command.extend(["-map", "0:a"])
 
@@ -975,16 +1094,25 @@ def apply_metadata(
 
     if return_code != 0:
         temp_output.unlink(missing_ok=True)
-        raise RuntimeError(f"ffmpeg metadata update failed for {track.title}: {stderr_output.strip()}")
+        raise RuntimeError(
+            f"ffmpeg metadata update failed for {track.title}: {stderr_output.strip()}"
+        )
 
     temp_output.replace(mp3_path)
     write_lyrics_metadata(mp3_path, track.lyrics_text)
-    debug_log(debug, f"Metadata written for {track.video_id}; lyrics={'yes' if track.lyrics_text else 'no'}")
+    debug_log(
+        debug,
+        f"Metadata written for {track.video_id}; lyrics={'yes' if track.lyrics_text else 'no'}",
+    )
     progress.advance(overall_task, 1)
 
 
 def visible_files(folder: Path) -> List[Path]:
-    return [path for path in folder.rglob("*") if path.is_file() and not path.name.startswith(".")]
+    return [
+        path
+        for path in folder.rglob("*")
+        if path.is_file() and not path.name.startswith(".")
+    ]
 
 
 def chunk_files(files: Iterable[Path], max_size: Optional[int]) -> List[List[Path]]:
@@ -1010,10 +1138,14 @@ def chunk_files(files: Iterable[Path], max_size: Optional[int]) -> List[List[Pat
     return chunks or [[]]
 
 
-def archive_name_for_part(base_zip_path: Path, part_index: int, total_parts: int) -> Path:
+def archive_name_for_part(
+    base_zip_path: Path, part_index: int, total_parts: int
+) -> Path:
     if total_parts <= 1:
         return base_zip_path
-    return base_zip_path.with_name(f"{base_zip_path.stem}.part{part_index:02d}{base_zip_path.suffix}")
+    return base_zip_path.with_name(
+        f"{base_zip_path.stem}.part{part_index:02d}{base_zip_path.suffix}"
+    )
 
 
 def zip_files(folder: Path, zip_path: Path, files: List[Path]) -> None:
@@ -1029,7 +1161,9 @@ def zip_files(folder: Path, zip_path: Path, files: List[Path]) -> None:
         console=console,
     ) as progress:
         task = progress.add_task(f"Creating {zip_path.name}", total=total_bytes)
-        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        with zipfile.ZipFile(
+            zip_path, "w", compression=zipfile.ZIP_DEFLATED
+        ) as archive:
             for path in files:
                 archive.write(path, arcname=path.relative_to(folder.parent))
                 progress.advance(task, path.stat().st_size)
@@ -1051,13 +1185,21 @@ def zip_folder(folder: Path, zip_path: Path, max_size: Optional[int]) -> List[Pa
 
 def print_banner() -> None:
     title = Text("YTMusic Downloader", style="bold bright_white")
-    subtitle = Text("Public URLs, private library auth, tagged MP3 export", style="cyan")
-    console.print(Panel.fit(Text.assemble(title, "\n", subtitle), border_style="bright_blue"))
+    subtitle = Text(
+        "Public URLs, private library auth, tagged MP3 export", style="cyan"
+    )
+    console.print(
+        Panel.fit(Text.assemble(title, "\n", subtitle), border_style="bright_blue")
+    )
 
 
-def summarize_collection(target: TargetSpec, collection: Dict[str, Any], tracks: List[Dict[str, Any]]) -> None:
+def summarize_collection(
+    target: TargetSpec, collection: Dict[str, Any], tracks: List[Dict[str, Any]]
+) -> None:
     title = collection.get("title") or "Untitled"
-    description = collection.get("description") or ("Single song" if target.kind == "song" else "No description")
+    description = collection.get("description") or (
+        "Single song" if target.kind == "song" else "No description"
+    )
     duration = collection.get("duration") or f"{len(tracks)} track(s)"
     console.print(
         Panel(
@@ -1080,7 +1222,9 @@ def finish_run(
 
     zip_after = args.zip_after
     if zip_after is None and not args.non_interactive:
-        zip_after = Confirm.ask("Compress the downloaded files into zip archives?", default=False)
+        zip_after = Confirm.ask(
+            "Compress the downloaded files into zip archives?", default=False
+        )
     if zip_after:
         base_zip_path = export_folder.with_suffix(".zip")
         archives = zip_folder(export_folder, base_zip_path, args.zip_max_size)
@@ -1135,8 +1279,14 @@ def run_remaining(
     )
 
     combined_result = DownloadRunResult(
-        downloaded_files=[*(prior_result.downloaded_files if prior_result else []), *result.downloaded_files],
-        downloaded_tracks=[*(prior_result.downloaded_tracks if prior_result else []), *result.downloaded_tracks],
+        downloaded_files=[
+            *(prior_result.downloaded_files if prior_result else []),
+            *result.downloaded_files,
+        ],
+        downloaded_tracks=[
+            *(prior_result.downloaded_tracks if prior_result else []),
+            *result.downloaded_tracks,
+        ],
         failures=[*(prior_result.failures if prior_result else []), *result.failures],
     )
     return finish_run(args, combined_result, export_folder)
@@ -1149,7 +1299,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ffmpeg_path = ensure_binary("ffmpeg")
     bun_path = maybe_binary("bun")
     if not bun_path:
-        console.print("[yellow]bun not found; continuing without a JS runtime override.[/]")
+        console.print(
+            "[yellow]bun not found; continuing without a JS runtime override.[/]"
+        )
     _ = ffmpeg_path
 
     auth_file = Path(args.auth_file).expanduser()
@@ -1159,14 +1311,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ytmusic = ensure_ytmusic(auth_file)
     download_auth = resolve_download_auth(args, auth_file)
     target = choose_target(args, auth_file, ytmusic)
-    debug_log(args.debug, f"Selected target: kind={target.kind} id={target.identifier} source={target.source_label}")
+    debug_log(
+        args.debug,
+        f"Selected target: kind={target.kind} id={target.identifier} source={target.source_label}",
+    )
 
     if target.kind == "playlist":
         collection = get_playlist_data(ytmusic, target.identifier)
     else:
         collection = get_song_collection(ytmusic, target.identifier)
 
-    tracks = [track for track in collection.get("tracks", []) if track.get("videoId") and track.get("isAvailable", True)]
+    tracks = [
+        track
+        for track in collection.get("tracks", [])
+        if track.get("videoId") and track.get("isAvailable", True)
+    ]
     if args.songs_limit is not None:
         tracks = tracks[: args.songs_limit]
 
@@ -1182,10 +1341,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.test_one:
         initial_tracks = tracks[:1]
-    elif args.yes_all or args.non_interactive or len(tracks) == 1 or target.kind == "song":
+    elif (
+        args.yes_all
+        or args.non_interactive
+        or len(tracks) == 1
+        or target.kind == "song"
+    ):
         initial_tracks = tracks
     else:
-        console.print("[bold cyan]Safety check:[/] downloading the first song before the full run.")
+        console.print(
+            "[bold cyan]Safety check:[/] downloading the first song before the full run."
+        )
         initial_tracks = tracks[:1]
 
     initial_result = process_tracks(
@@ -1211,10 +1377,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             and len(tracks) > 1
             and len(initial_tracks) == 1
             and initial_result.failures
-            and all(is_unavailable_error(failure.message) for failure in initial_result.failures)
+            and all(
+                is_unavailable_error(failure.message)
+                for failure in initial_result.failures
+            )
         )
         if should_skip_failed_safety_track:
-            console.print("[yellow]Safety check hit an unavailable song. Skipping it and continuing.[/]")
+            console.print(
+                "[yellow]Safety check hit an unavailable song. Skipping it and continuing.[/]"
+            )
             return run_remaining(
                 args,
                 ytmusic,
@@ -1236,7 +1407,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         console.print("[red]Nothing was downloaded successfully.[/]")
         return 1
 
-    if len(initial_tracks) == 1 and len(tracks) > 1 and not (args.test_one or args.yes_all or args.non_interactive):
+    if (
+        len(initial_tracks) == 1
+        and len(tracks) > 1
+        and not (args.test_one or args.yes_all or args.non_interactive)
+    ):
         remaining_tracks = tracks[1:]
         continue_full = Confirm.ask(
             f"The first song finished. Continue with the remaining {len(remaining_tracks)} tracks?",
