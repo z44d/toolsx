@@ -92,8 +92,12 @@ def is_transient_network_warning(message: str) -> bool:
 
 def print_banner() -> None:
     title = Text("Subtitle Extractor", style="bold bright_white")
-    subtitle = Text("Fetch subtitles with yt-dlp metadata, convert, and save as UTF-8", style="cyan")
-    console.print(Panel.fit(Text.assemble(title, "\n", subtitle), border_style="bright_blue"))
+    subtitle = Text(
+        "Fetch subtitles with yt-dlp metadata, convert, and save as UTF-8", style="cyan"
+    )
+    console.print(
+        Panel.fit(Text.assemble(title, "\n", subtitle), border_style="bright_blue")
+    )
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -110,10 +114,14 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=DEFAULT_OUTPUT_TYPE,
         help="Output format (default: json)",
     )
-    parser.add_argument("--output", help="Output file path (default: <video-id>.<type>)")
+    parser.add_argument(
+        "--output", help="Output file path (default: <video-id>.<type>)"
+    )
     parser.add_argument("--cookies-file", help="Netscape cookies.txt file for yt-dlp")
     parser.add_argument("--browser", help="Browser name for yt-dlp cookie extraction")
-    parser.add_argument("--browser-profile", default=None, help="Browser profile name/path")
+    parser.add_argument(
+        "--browser-profile", default=None, help="Browser profile name/path"
+    )
     parser.add_argument(
         "--js-runtime",
         default="bun",
@@ -124,7 +132,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=None,
         help="Optional explicit path for the yt-dlp JS runtime",
     )
-    parser.add_argument("--debug", action="store_true", help="Print verbose debug logs for every step")
+    parser.add_argument(
+        "--debug", action="store_true", help="Print verbose debug logs for every step"
+    )
     return parser.parse_args(argv)
 
 
@@ -149,7 +159,9 @@ def ydl_options(args: argparse.Namespace) -> Dict[str, Any]:
         "skip_download": True,
         "noplaylist": True,
     }
-    js_runtime = build_js_runtime_option(args.js_runtime, args.js_runtime_path, args.debug)
+    js_runtime = build_js_runtime_option(
+        args.js_runtime, args.js_runtime_path, args.debug
+    )
     if js_runtime:
         options["js_runtimes"] = js_runtime
     if args.cookies_file:
@@ -202,26 +214,39 @@ def extract_video_info(target: str, args: argparse.Namespace) -> Dict[str, Any]:
     with YoutubeDL(cast(Dict[str, Any], ydl_options(args))) as ydl:  # type: ignore[arg-type]
         info = cast(Dict[str, Any], ydl.extract_info(target, download=False))
     if info.get("_type") == "playlist":
-        raise ValueError("Please provide a single video URL or video ID, not a playlist.")
+        raise ValueError(
+            "Please provide a single video URL or video ID, not a playlist."
+        )
     return info
 
 
 def collect_subtitle_options(info: Dict[str, Any]) -> List[SubtitleOption]:
     options: List[SubtitleOption] = []
-    for kind, payload in (("manual", info.get("subtitles") or {}), ("automatic", info.get("automatic_captions") or {})):
+    for kind, payload in (
+        ("manual", info.get("subtitles") or {}),
+        ("automatic", info.get("automatic_captions") or {}),
+    ):
         if not isinstance(payload, dict):
             continue
         for language, formats in payload.items():
-            if not (isinstance(language, str) and isinstance(formats, list) and formats):
+            if not (
+                isinstance(language, str) and isinstance(formats, list) and formats
+            ):
                 continue
             direct_formats = [
                 item
                 for item in cast(List[Dict[str, Any]], formats)
-                if isinstance(item.get("url"), str) and "tlang=" not in str(item.get("url"))
+                if isinstance(item.get("url"), str)
+                and "tlang=" not in str(item.get("url"))
             ]
             if direct_formats:
-                options.append(SubtitleOption(language=language, kind=kind, formats=direct_formats))
-    return sorted(options, key=lambda item: (item.language.lower(), 0 if item.kind == "manual" else 1))
+                options.append(
+                    SubtitleOption(language=language, kind=kind, formats=direct_formats)
+                )
+    return sorted(
+        options,
+        key=lambda item: (item.language.lower(), 0 if item.kind == "manual" else 1),
+    )
 
 
 def print_language_table(options: List[SubtitleOption]) -> None:
@@ -231,7 +256,9 @@ def print_language_table(options: List[SubtitleOption]) -> None:
     table.add_column("Kind", style="green")
     table.add_column("Formats", style="dim")
     for index, option in enumerate(options, start=1):
-        formats = ", ".join(sorted({str(item.get("ext") or "unknown") for item in option.formats}))
+        formats = ", ".join(
+            sorted({str(item.get("ext") or "unknown") for item in option.formats})
+        )
         table.add_row(str(index), option.language, option.kind, formats)
     console.print(table)
 
@@ -247,10 +274,14 @@ def resolve_language_option(
 
     if language and language.strip():
         normalized = language.strip().lower()
-        exact_matches = [item for item in options if item.language.lower() == normalized]
+        exact_matches = [
+            item for item in options if item.language.lower() == normalized
+        ]
         if exact_matches:
             return exact_matches[0]
-        prefix_matches = [item for item in options if item.language.lower().startswith(normalized)]
+        prefix_matches = [
+            item for item in options if item.language.lower().startswith(normalized)
+        ]
         if len(prefix_matches) == 1:
             return prefix_matches[0]
         available = ", ".join(option.language for option in options)
@@ -287,11 +318,15 @@ def choose_format(formats: Iterable[Dict[str, Any]]) -> str:
             best_ext = ext or "unknown"
             best_rank = rank
     if not best_ext:
-        raise RuntimeError("No downloadable subtitle format was found for the selected language.")
+        raise RuntimeError(
+            "No downloadable subtitle format was found for the selected language."
+        )
     return best_ext
 
 
-def download_subtitle_payload(info: Dict[str, Any], option: SubtitleOption, args: argparse.Namespace) -> tuple[str, str]:
+def download_subtitle_payload(
+    info: Dict[str, Any], option: SubtitleOption, args: argparse.Namespace
+) -> tuple[str, str]:
     source_format = choose_format(option.formats)
     with tempfile.TemporaryDirectory(prefix="toolsx-subtitles-") as temp_dir_name:
         temp_dir = Path(temp_dir_name)
@@ -312,18 +347,30 @@ def download_subtitle_payload(info: Dict[str, Any], option: SubtitleOption, args
             f"Downloading subtitle file via yt-dlp: lang={option.language} kind={option.kind} preferred={source_format}",
         )
         with YoutubeDL(download_options) as ydl:  # type: ignore[arg-type]
-            ydl.download([str(info.get("webpage_url") or info.get("original_url") or info.get("id"))])
+            ydl.download(
+                [
+                    str(
+                        info.get("webpage_url")
+                        or info.get("original_url")
+                        or info.get("id")
+                    )
+                ]
+            )
 
         matches = sorted(temp_dir.glob(f"{info.get('id')}.{option.language}.*"))
         if not matches:
             matches = sorted(temp_dir.glob(f"{info.get('id')}.*"))
         if not matches:
-            raise RuntimeError("yt-dlp did not create a subtitle file for the selected language.")
+            raise RuntimeError(
+                "yt-dlp did not create a subtitle file for the selected language."
+            )
 
         subtitle_path = matches[0]
         detected_format = subtitle_path.suffix.lstrip(".").lower() or source_format
         debug_log(args.debug, f"Loaded subtitle file: {subtitle_path.name}")
-        return detected_format, subtitle_path.read_text(encoding="utf-8", errors="replace")
+        return detected_format, subtitle_path.read_text(
+            encoding="utf-8", errors="replace"
+        )
 
 
 def clean_subtitle_text(value: str) -> str:
@@ -360,7 +407,9 @@ def parse_vtt(content: str) -> List[SubtitleCue]:
         if "-->" not in line:
             index += 1
             continue
-        start_raw, end_raw = [part.strip().split(" ", 1)[0] for part in line.split("-->", 1)]
+        start_raw, end_raw = [
+            part.strip().split(" ", 1)[0] for part in line.split("-->", 1)
+        ]
         index += 1
         text_lines: List[str] = []
         while index < len(lines) and lines[index].strip():
@@ -413,7 +462,9 @@ def parse_json3(content: str) -> List[SubtitleCue]:
         segs = event.get("segs") or []
         if not isinstance(segs, list):
             continue
-        text = clean_subtitle_text("".join(str(seg.get("utf8") or "") for seg in segs if isinstance(seg, dict)))
+        text = clean_subtitle_text(
+            "".join(str(seg.get("utf8") or "") for seg in segs if isinstance(seg, dict))
+        )
         if not text:
             continue
         start_ms = int(event.get("tStartMs") or 0)
@@ -513,7 +564,9 @@ def output_path_for(args: argparse.Namespace, video_id: str) -> Path:
     return Path(f"{video_id}.{args.output_type}")
 
 
-def print_video_summary(info: Dict[str, Any], selected: SubtitleOption, output_path: Path, output_type: str) -> None:
+def print_video_summary(
+    info: Dict[str, Any], selected: SubtitleOption, output_path: Path, output_type: str
+) -> None:
     console.print(
         Panel(
             f"[bold]{info.get('title') or info.get('id') or 'Untitled'}[/]\n"
@@ -528,11 +581,15 @@ def print_video_summary(info: Dict[str, Any], selected: SubtitleOption, output_p
     )
 
 
-def build_document(info: Dict[str, Any], option: SubtitleOption, args: argparse.Namespace) -> SubtitleDocument:
+def build_document(
+    info: Dict[str, Any], option: SubtitleOption, args: argparse.Namespace
+) -> SubtitleDocument:
     source_format, payload = download_subtitle_payload(info, option, args)
     cues = parse_subtitle_payload(payload, source_format)
     if not cues:
-        raise RuntimeError("Subtitle payload was downloaded, but no subtitle lines could be parsed.")
+        raise RuntimeError(
+            "Subtitle payload was downloaded, but no subtitle lines could be parsed."
+        )
     return SubtitleDocument(
         video_id=str(info.get("id") or "unknown-video"),
         title=str(info.get("title") or info.get("id") or "Untitled"),
@@ -568,7 +625,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
         )
         return 0
-    except (FileNotFoundError, ValueError, RuntimeError, json.JSONDecodeError, ET.ParseError) as error:
+    except (
+        FileNotFoundError,
+        ValueError,
+        RuntimeError,
+        json.JSONDecodeError,
+        ET.ParseError,
+    ) as error:
         console.print(f"[red]{error}[/]")
         return 1
     except KeyboardInterrupt:

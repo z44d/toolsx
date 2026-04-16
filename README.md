@@ -122,6 +122,8 @@ If required input is missing in interactive mode, `ytm-dl` asks for it.
 
 `tg-uploader` accepts values from CLI args first, then environment variables, then prompts.
 
+It supports both `--file` for a single upload and `--files` for multiple uploads from explicit paths or glob patterns.
+
 Supported environment variables:
 
 - `TOOLSX_TG_API_ID`, `TG_API_ID`, `TELEGRAM_API_ID`
@@ -138,7 +140,11 @@ export TOOLSX_TG_BOT_TOKEN=123:token
 export TOOLSX_TG_CHAT_ID=-1001234567890
 
 tg-uploader --file ./archive.zip --caption "Nightly build"
+tg-uploader --files './exports/*'
+tg-uploader --files './exports/*.mp3' './exports/*.flac'
 ```
+
+Interactive mode also accepts glob patterns from the current directory. For example, entering `(*)` uploads all visible files in the current directory, and `(*.mp3)` uploads all matching MP3 files. If a pattern matches nothing, the command exits with an error.
 
 Debug mode:
 

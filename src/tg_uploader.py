@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import glob
 import importlib
-import os
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -45,7 +46,7 @@ class UploadConfig:
     api_hash: str
     bot_token: str
     chat_id: Union[int, str]
-    file_path: Path
+    file_paths: list[Path]
     caption: Optional[str]
 
 
@@ -79,6 +80,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--bot-token", help="Telegram bot token")
     parser.add_argument("--chat-id", help="Target chat ID or username")
     parser.add_argument("--file", dest="file_path", help="Path to the file to upload")
+    parser.add_argument(
+        "--files",
+        nargs="+",
+        help="One or more file paths or glob patterns to upload",
+    )
     parser.add_argument("--caption", help="Optional document caption")
     parser.add_argument(
         "--disable-color", action="store_true", help="Disable ANSI colors"
@@ -119,9 +125,55 @@ def list_pickable_files(directory: Path) -> list[Path]:
     )
 
 
-def prompt_for_file_path(current: Optional[str]) -> str:
-    if current and current.strip():
-        return current.strip()
+def resolve_file_inputs(inputs: Sequence[str], *, allow_patterns: bool) -> list[Path]:
+    resolved_paths: list[Path] = []
+    seen: set[Path] = set()
+
+    for raw_input in inputs:
+        value = raw_input.strip()
+        if not value:
+            continue
+
+        pattern = (
+            value[1:-1].strip()
+            if value.startswith("(") and value.endswith(")")
+            else value
+        )
+        matches: list[Path] = []
+
+        if allow_patterns:
+            matches = [
+                Path(match).expanduser().resolve()
+                for match in glob.glob(os.path.expanduser(pattern))
+            ]
+
+        if not matches:
+            candidate = Path(pattern).expanduser().resolve()
+            if candidate.exists() and candidate.is_file():
+                matches = [candidate]
+
+        if not matches:
+            raise FileNotFoundError(f"No files found for pattern: {raw_input}")
+
+        for match in sorted(matches, key=lambda item: item.name.lower()):
+            if not match.is_file() or match in seen:
+                continue
+            seen.add(match)
+            resolved_paths.append(match)
+
+    if not resolved_paths:
+        raise FileNotFoundError("No files matched the provided input.")
+
+    return resolved_paths
+
+
+def prompt_for_file_inputs(
+    current_file: Optional[str], current_files: Optional[Sequence[str]]
+) -> list[str]:
+    if current_files:
+        return [value for value in current_files if value and value.strip()]
+    if current_file and current_file.strip():
+        return [current_file.strip()]
 
     files = list_pickable_files(Path.cwd())
     if not files:
@@ -145,7 +197,9 @@ def prompt_for_file_path(current: Optional[str]) -> str:
         )
 
     console.print(table)
-    console.print("[dim]Pick a number or paste a custom file path.[/]")
+    console.print(
+        "[dim]Pick a number, paste a custom file path, or enter a glob pattern like (*) or (*.mp3).[/]"
+    )
 
     while True:
         choice = Prompt.ask("File path / number").strip()
@@ -155,10 +209,10 @@ def prompt_for_file_path(current: Optional[str]) -> str:
         if choice.isdigit():
             index = int(choice)
             if 1 <= index <= len(files):
-                return str(files[index - 1])
+                return [str(files[index - 1])]
             console.print("[yellow]Invalid file number.[/]")
             continue
-        return choice
+        return [choice]
 
 
 def parse_chat_id(value: str) -> Union[int, str]:
@@ -179,25 +233,22 @@ def collect_config(args: argparse.Namespace) -> UploadConfig:
         "Bot token", args.bot_token, ENV_KEYS["bot_token"], secret=True
     )
     chat_id_raw = prompt_value("Chat ID", args.chat_id, ENV_KEYS["chat_id"])
-    file_path_raw = prompt_for_file_path(args.file_path)
+    file_inputs = prompt_for_file_inputs(args.file_path, args.files)
+    file_paths = resolve_file_inputs(file_inputs, allow_patterns=True)
     debug_log(
         args.debug,
-        f"Collected config inputs: api_id={'set' if api_id_raw else 'missing'} api_hash={'set' if api_hash else 'missing'} bot_token={'set' if bot_token else 'missing'} chat_id={chat_id_raw!r} file={file_path_raw!r}",
+        f"Collected config inputs: api_id={'set' if api_id_raw else 'missing'} api_hash={'set' if api_hash else 'missing'} bot_token={'set' if bot_token else 'missing'} chat_id={chat_id_raw!r} files={[str(path) for path in file_paths]!r}",
     )
 
     if not api_id_raw.isdigit():
         raise ValueError("API ID must be numeric.")
-
-    file_path = Path(file_path_raw).expanduser().resolve()
-    if not file_path.exists() or not file_path.is_file():
-        raise FileNotFoundError(f"File not found: {file_path}")
 
     return UploadConfig(
         api_id=int(api_id_raw),
         api_hash=api_hash,
         bot_token=bot_token,
         chat_id=parse_chat_id(chat_id_raw),
-        file_path=file_path,
+        file_paths=file_paths,
         caption=args.caption,
     )
 
@@ -213,12 +264,18 @@ def print_banner() -> None:
 
 
 def print_upload_plan(config: UploadConfig) -> None:
-    file_size = config.file_path.stat().st_size
+    total_size = sum(file_path.stat().st_size for file_path in config.file_paths)
+    file_label = (
+        config.file_paths[0].name
+        if len(config.file_paths) == 1
+        else f"{len(config.file_paths)} files"
+    )
     console.print(
         Panel(
             f"[cyan]Chat:[/] {config.chat_id}\n"
-            f"[green]File:[/] {config.file_path.name}\n"
-            f"[cyan]Size:[/] {format_bytes(file_size)}\n"
+            f"[green]Selection:[/] {file_label}\n"
+            f"[cyan]Count:[/] {len(config.file_paths)}\n"
+            f"[green]Total size:[/] {format_bytes(total_size)}\n"
             f"[green]Caption:[/] {config.caption or '-'}",
             title="Upload Plan",
             border_style="green",
@@ -226,15 +283,61 @@ def print_upload_plan(config: UploadConfig) -> None:
     )
 
 
-async def upload_file(config: UploadConfig, debug: bool) -> None:
+async def send_document_with_retry(
+    app: object, config: UploadConfig, file_path: Path, debug: bool
+) -> object:
+    while True:
+        try:
+            file_size = file_path.stat().st_size
+
+            with Progress(
+                SpinnerColumn(style="cyan"),
+                TextColumn("[bold cyan]{task.description}"),
+                BarColumn(bar_width=36),
+                TaskProgressColumn(),
+                DownloadColumn(),
+                TransferSpeedColumn(),
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+                console=console,
+            ) as progress:
+                task_id = progress.add_task(
+                    f"Uploading {file_path.name}", total=max(file_size, 1)
+                )
+
+                def update_progress(current: int, total: int) -> None:
+                    progress.update(task_id, total=max(total, 1), completed=current)
+                    if debug:
+                        console.print(
+                            f"[dim]upload progress: {current}/{max(total, 1)} bytes[/]"
+                        )
+
+                return await app.send_document(
+                    chat_id=config.chat_id,
+                    document=str(file_path),
+                    caption=config.caption,
+                    force_document=True,
+                    progress=update_progress,
+                )
+        except Exception as error:
+            if error.__class__.__name__ != "FloodWait" or not hasattr(error, "value"):
+                raise
+            wait_seconds = int(getattr(error, "value"))
+            console.print(
+                f"[yellow]Telegram asked to wait {wait_seconds} seconds before retrying {file_path.name}.[/]"
+            )
+            await asyncio.sleep(wait_seconds)
+
+
+async def upload_files(config: UploadConfig, debug: bool) -> None:
     Client = importlib.import_module("pyrogram").Client
-    file_size = config.file_path.stat().st_size
 
     print_upload_plan(config)
+    console.print(f"[cyan]Found {len(config.file_paths)} file(s) to upload.[/]")
     console.print("[dim]Connecting to Telegram...[/]")
     debug_log(
         debug,
-        f"Preparing Telegram client for chat={config.chat_id!r} file={str(config.file_path)!r} size={file_size}",
+        f"Preparing Telegram client for chat={config.chat_id!r} files={[str(path) for path in config.file_paths]!r}",
     )
 
     app = Client(
@@ -246,63 +349,52 @@ async def upload_file(config: UploadConfig, debug: bool) -> None:
         no_updates=True,
     )
 
-    with Progress(
-        SpinnerColumn(style="cyan"),
-        TextColumn("[bold cyan]{task.description}"),
-        BarColumn(bar_width=36),
-        TaskProgressColumn(),
-        DownloadColumn(),
-        TransferSpeedColumn(),
-        TimeElapsedColumn(),
-        TimeRemainingColumn(),
-        console=console,
-    ) as progress:
-        task_id = progress.add_task("Uploading file", total=max(file_size, 1))
+    async with app:
+        debug_log(debug, "Opening Telegram session")
+        me = await app.get_me()
+        username = f"@{me.username}" if me.username else "none"
+        debug_log(debug, f"Authenticated as bot id={me.id} username={username}")
+        console.print(
+            Panel(
+                f"[cyan]Name:[/] {me.first_name}\n"
+                f"[green]Username:[/] {username}\n"
+                f"[cyan]Bot ID:[/] {me.id}",
+                title="Bot Session",
+                border_style="magenta",
+            )
+        )
 
-        def update_progress(current: int, total: int) -> None:
-            progress.update(task_id, total=max(total, 1), completed=current)
-            if debug:
-                console.print(
-                    f"[dim]upload progress: {current}/{max(total, 1)} bytes[/]"
-                )
-
-        async with app:
-            debug_log(debug, "Opening Telegram session")
-            me = await app.get_me()
-            username = f"@{me.username}" if me.username else "none"
-            debug_log(debug, f"Authenticated as bot id={me.id} username={username}")
+        message = None
+        total_files = len(config.file_paths)
+        for index, file_path in enumerate(config.file_paths, start=1):
             console.print(
-                Panel(
-                    f"[cyan]Name:[/] {me.first_name}\n"
-                    f"[green]Username:[/] {username}\n"
-                    f"[cyan]Bot ID:[/] {me.id}",
-                    title="Bot Session",
-                    border_style="magenta",
-                )
+                f"[bold cyan]Uploading file {index}/{total_files}:[/] {file_path.name}"
             )
-            debug_log(debug, "Sending document to Telegram")
-            message = await app.send_document(
-                chat_id=config.chat_id,
-                document=str(config.file_path),
-                caption=config.caption,
-                force_document=True,
-                progress=update_progress,
+            debug_log(
+                debug,
+                f"Sending document to Telegram: {str(file_path)!r}",
             )
+            message = await send_document_with_retry(app, config, file_path, debug)
             debug_log(
                 debug,
                 f"Upload finished with message id={message.id if message else 'none'}",
             )
 
+            console.print(
+                Panel(
+                    f"[green]File:[/] {file_path.name}\n"
+                    f"[green]Message ID:[/] {message.id}\n[cyan]Chat ID:[/] {message.chat.id}",
+                    title=f"Upload Complete ({index}/{total_files})",
+                    border_style="bright_green",
+                )
+            )
+
+            if index < total_files:
+                console.print("[dim]Sleeping 3 seconds before the next file...[/]")
+                await asyncio.sleep(3)
+
     if message is None:
         raise RuntimeError("Upload stopped before completion.")
-
-    console.print(
-        Panel(
-            f"[green]Message ID:[/] {message.id}\n[cyan]Chat ID:[/] {message.chat.id}",
-            title="Upload Complete",
-            border_style="bright_green",
-        )
-    )
 
 
 async def async_main(argv: Optional[Sequence[str]] = None) -> int:
@@ -312,12 +404,12 @@ async def async_main(argv: Optional[Sequence[str]] = None) -> int:
     print_banner()
     debug_log(
         args.debug,
-        f"Arguments parsed: file={args.file_path!r} chat_id={args.chat_id!r} disable_color={args.disable_color}",
+        f"Arguments parsed: file={args.file_path!r} files={args.files!r} chat_id={args.chat_id!r} disable_color={args.disable_color}",
     )
 
     try:
         config = collect_config(args)
-        await upload_file(config, args.debug)
+        await upload_files(config, args.debug)
         return 0
     except ModuleNotFoundError as error:
         if error.name == "pyrogram":
@@ -334,11 +426,6 @@ async def async_main(argv: Optional[Sequence[str]] = None) -> int:
         console.print("[yellow]Upload cancelled by user.[/]")
         return 130
     except Exception as error:
-        if error.__class__.__name__ == "FloodWait" and hasattr(error, "value"):
-            console.print(
-                f"[red]Telegram asked to wait {getattr(error, 'value')} seconds.[/]"
-            )
-            return 1
         if error.__class__.__module__.startswith("pyrogram"):
             console.print(f"[red]Telegram RPC error:[/] {error}")
             return 1
