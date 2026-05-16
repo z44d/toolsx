@@ -5,6 +5,7 @@
 - `ytm-dl` - download a single YouTube Music song or a full playlist as tagged MP3 files.
 - `tg-uploader` - upload a file to Telegram with a bot session.
 - `subtitle-extract` - extract video subtitles or auto-captions as UTF-8 JSON, SRT, or text.
+- `netis` - Netis router administration CLI for status, Wi-Fi, WAN, devices, and WPS.
 - `toolsx` - list the installed tools and dispatch to a tool by name.
 
 ## Install
@@ -13,7 +14,7 @@
 pip install tools_extra
 ```
 
-The package is published as `tools_extra`, but the installed CLI commands stay `toolsx`, `ytm-dl`, and `tg-uploader`.
+The package is published as `tools_extra`, but the installed CLI commands stay `toolsx`, `ytm-dl`, `tg-uploader` and `netis`.
 
 From the repo:
 
@@ -35,6 +36,7 @@ You can also dispatch through the umbrella command:
 toolsx ytm-dl --help
 toolsx tg-uploader --help
 toolsx subtitle-extract --help
+toolsx netis --help
 ```
 
 Direct commands stay available too:
@@ -43,6 +45,7 @@ Direct commands stay available too:
 ytm-dl --help
 tg-uploader --help
 subtitle-extract --help
+netis --help
 ```
 
 ## subtitle-extract
@@ -151,6 +154,29 @@ Debug mode:
 ```bash
 tg-uploader --file ./archive.zip --debug
 ```
+
+## netis
+- Example:
+```bash
+netis # Friendly TUI
+netis --full-report
+netis --wlan-info
+netis --admin-password newpasshere
+netis --internet-info
+netis --devices-info
+netis --wps-info
+netis -h
+```
+
+- Working with all `netis` Wi-Fi Routers, Models:
+  - Wi-Fi 6: `NX62`, `NX31`, `NX30`, `NX10`, `N6`.
+  - Wi-Fi 5: `NC65`, `NC66`, `NC63`, `NC21`, `N2`, `N3F`, `WF2780`, `N5`, `N3D`, and all other Wi-Fi 5 Routers.
+  - Wi-Fi 4: `WF2409E`, `WF2409PD`, `WF2419E`, `W1`, `W4`, and all other Wi-Fi 4 Routers.
+
+- Tested on:
+  - `N3D` with latest version `V4.0.1.4296`
+  - `WF2409E` with latest version `V4.0.1.4296`
+
 
 ## Local development
 

@@ -34,6 +34,13 @@ TOOLS: tuple[ToolSpec, ...] = (
         callable_name="main",
         summary="Extract subtitles with yt-dlp metadata and save them as UTF-8 JSON, SRT, or text.",
     ),
+    ToolSpec(
+        key="netis",
+        command="netis",
+        module="netis",
+        callable_name="main",
+        summary="Netis Router Administration CLI (status, Wi-Fi, WAN, devices, WPS, and more)",
+    ),
 )
 
 

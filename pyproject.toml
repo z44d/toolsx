@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tools_extra"
-version = "0.1.2"
+version = "0.1.3"
 description = "CLI toolbox with YouTube Music downloading and Telegram uploading tools."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -28,6 +28,7 @@ toolsx = "toolsx.cli:main"
 ytm-dl = "ytm_dl:main"
 tg-uploader = "tg_uploader:sync_main"
 subtitle-extract = "subtitle_extractor:main"
+netis = "netis:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
