@@ -14,7 +14,6 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
-from rich import print as rprint
 
 ROUTER_IP = "192.168.1.1"
 BASE_URL = f"http://{ROUTER_IP}/cgi-bin"
@@ -205,7 +204,7 @@ def print_internet_info():
             wan.get("ipAddr", "N/A"),
             "[bold red]OFFLINE[/bold red]"
             if data.get("connected", "0") == "0"
-            else "[bold green]ONLINE[/bold green]",
+            else f"[bold green]ONLINE[/bold green] [bold grey50]{float(data.get('conn_speed', '0')) / 100}K[/bold grey50]",
             ppp_user,
             ppp_pass,
         )
@@ -277,6 +276,26 @@ def print_connected_devices():
     console.print(table)
 
 
+def reboot_system():
+    payload = {
+        "mode_name": "skk_set",
+        "reboot_set": "1",
+        "app": "reboot",
+        "wl_link": "0",
+    }
+
+    try:
+        res = requests.post(
+            f"{BASE_URL}/skk_set.cgi", headers=HEADERS, data=payload, timeout=5
+        )
+        if res.status_code == 200 or res.status_code == 504:
+            return True
+    except RequestException:
+        return True
+
+    return False
+
+
 # --- Interactive TUI ---
 def interactive_menu():
     while True:
@@ -291,11 +310,12 @@ def interactive_menu():
         console.print("6. WPS Audit")
         console.print("7. Update Wi-Fi Settings")
         console.print("8. Update Admin Password")
-        console.print("9. Exit")
+        console.print("9. Reboot")
+        console.print("10. Exit")
 
         choice = Prompt.ask(
             "\nSelect an option",
-            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
             default="1",
         )
 
@@ -320,8 +340,22 @@ def interactive_menu():
         elif choice == "8":
             interactive_password_update()
         elif choice == "9":
+            interactive_reboot()
+        elif choice == "10":
             console.print("[bold green]Goodbye![/bold green]")
             break
+
+
+def interactive_reboot():
+    with console.status(
+        "[bold green]Rebooting the router (this may take a few seconds)..."
+    ):
+        success = reboot_system()
+
+        if success:
+            console.print("[bold green]✅ Rebooted successfully![/bold green]")
+        else:
+            console.print("[bold red]❌ Failed to reboot.[/bold red]")
 
 
 def interactive_password_update():
@@ -413,6 +447,7 @@ def main():
     parser.add_argument(
         "--admin-password", type=str, help="New Password for the admin panel"
     )
+    parser.add_argument("--reboot", action="store_true", help="Reboot the router")
 
     # Mutation Flags
     parser.add_argument(
@@ -497,6 +532,10 @@ def main():
     if args.admin_password is not None:
         action_taken = True
         update_admin_password(args.admin_password)
+
+    if args.reboot:
+        action_taken = True
+        interactive_reboot()
 
     # If no flags were provided, launch interactive TUI
     if not action_taken:
