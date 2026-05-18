@@ -187,6 +187,7 @@ def print_internet_info():
     table.add_column("ID", style="cyan")
     table.add_column("Interface", style="blue")
     table.add_column("IP Address", style="green")
+    table.add_column("Connection")
     table.add_column("PPPoE Username", style="yellow")
     table.add_column("PPPoE Password", style="red")
 
@@ -202,6 +203,9 @@ def print_internet_info():
             wan.get("id", "N/A"),
             wan.get("ifname", "N/A"),
             wan.get("ipAddr", "N/A"),
+            "[bold red]OFFLINE[/bold red]"
+            if data.get("connected", "0") == "0"
+            else "[bold green]ONLINE[/bold green]",
             ppp_user,
             ppp_pass,
         )
