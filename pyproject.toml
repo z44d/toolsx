@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tools_extra"
-version = "0.1.4"
+version = "1.0.0"
 description = "CLI toolbox with YouTube Music downloading and Telegram uploading tools."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,6 +17,7 @@ dependencies = [
   "rich~=14.3.3",
   "yt-dlp[default]~=2026.3.17",
   "ytmusicapi~=1.11.5",
+  "pyrotgcrypto~=1.2.7"
 ]
 
 [project.urls]
