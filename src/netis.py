@@ -875,7 +875,7 @@ def interactive_wlan_update():
 
 
 # --- Main Entry Point ---
-def main():
+def main(argv: list[str] | None = None) -> int:
     global ROUTER_IP, BASE_URL
     parser = argparse.ArgumentParser(description="Netis Router Administration CLI")
     parser.add_argument(
@@ -993,7 +993,7 @@ def main():
         "--disable", action="store_true", help="Disable the specified Wi-Fi network"
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # Determine if any CLI flags were used
     action_taken = False
@@ -1136,10 +1136,12 @@ def main():
     if not action_taken:
         interactive_menu()
 
+    return 0
+
 
 if __name__ == "__main__":
     try:
-        main()
+        raise SystemExit(main())
     except KeyboardInterrupt:
         console.print("\n[bold red]Operation cancelled by user. Exiting...[/bold red]")
         sys.exit(0)
