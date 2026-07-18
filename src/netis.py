@@ -25,7 +25,26 @@ HEADERS = {
     "X-Requested-With": "XMLHttpRequest",
 }
 
+DEBUG = False
+
 console = Console()
+
+
+def debug_req(method, url, payload, status, response_text=""):
+    if not DEBUG:
+        return
+    console.print(
+        f"\n[bold yellow]>>> DEBUG REQ[/bold yellow] [bold cyan]{method}[/bold cyan] {url}"
+    )
+    if payload:
+        console.print(f"[bold yellow]  Payload:[/bold yellow] {payload}")
+    console.print(
+        f"[bold yellow]  Status:[/bold yellow] [bold green]{status}[/bold green]"
+    )
+    if response_text:
+        snippet = response_text[:500]
+        console.print(f"[bold yellow]  Response:[/bold yellow] {snippet}")
+    console.print()
 
 
 # --- Utility Functions ---
@@ -62,9 +81,9 @@ def fetch_router_data(app_name, referer_path=""):
             headers["Referer"] = f"http://{ROUTER_IP}/{referer_path}"
 
         payload = {"mode_name": "skk_get", "wl_link": 0, "app": app_name}
-        res = requests.post(
-            f"{BASE_URL}/skk_get.cgi", headers=headers, data=payload, timeout=5
-        )
+        url = f"{BASE_URL}/skk_get.cgi"
+        res = requests.post(url, headers=headers, data=payload, timeout=5)
+        debug_req("POST", url, payload, res.status_code, res.text)
         res.raise_for_status()
         return clean_json(res.text)
     except RequestException as e:
@@ -90,13 +109,14 @@ def update_admin_password(password: str):
     }
 
     try:
-        res = requests.post(
-            f"{BASE_URL}/skk_set.cgi", headers=HEADERS, data=payload, timeout=5
-        )
+        url = f"{BASE_URL}/skk_set.cgi"
+        res = requests.post(url, headers=HEADERS, data=payload, timeout=5)
+        debug_req("POST", url, payload, res.status_code, res.text)
         # The router usually returns a timeout error intentionally after saving, we check if request went through
         if res.status_code == 200 or res.status_code == 504:
             return True
-    except RequestException:
+    except RequestException as e:
+        debug_req("POST", f"{BASE_URL}/skk_set.cgi", payload, "EXCEPTION", str(e))
         # Timeouts are common upon successful saving/restarting wlan interface
         return True
 
@@ -150,13 +170,14 @@ def update_wlan(wl_idx, ssid=None, password=None, broad=None, enabled=None):
     }
 
     try:
-        res = requests.post(
-            f"{BASE_URL}/skk_set.cgi", headers=HEADERS, data=payload, timeout=5
-        )
+        url = f"{BASE_URL}/skk_set.cgi"
+        res = requests.post(url, headers=HEADERS, data=payload, timeout=5)
+        debug_req("POST", url, payload, res.status_code, res.text)
         # The router usually returns a timeout error intentionally after saving, we check if request went through
         if res.status_code == 200 or res.status_code == 504:
             return True
-    except RequestException:
+    except RequestException as e:
+        debug_req("POST", f"{BASE_URL}/skk_set.cgi", payload, "EXCEPTION", str(e))
         # Timeouts are common upon successful saving/restarting wlan interface
         return True
 
@@ -189,6 +210,10 @@ def print_internet_info():
     table.add_column("Connection")
     table.add_column("PPPoE Username", style="yellow")
     table.add_column("PPPoE Password", style="red")
+    table.add_column("MTU", style="magenta")
+    table.add_column("MAC", style="cyan")
+    table.add_column("DNS1", style="green")
+    table.add_column("DNS2", style="green")
 
     for wan in data.get("wan", []):
         ppp_user = (
@@ -197,6 +222,10 @@ def print_internet_info():
         ppp_pass = (
             b64dec(wan.get("pppPassword", "")) if wan.get("pppPassword") else "N/A"
         )
+        mtu = wan.get("pppMtu", "N/A")
+        mac = wan.get("mac", "N/A")
+        dns1 = wan.get("dns1", "") or "N/A"
+        dns2 = wan.get("dns2", "") or "N/A"
 
         table.add_row(
             wan.get("id", "N/A"),
@@ -207,6 +236,10 @@ def print_internet_info():
             else f"[bold green]ONLINE[/bold green] [bold grey50]{float(data.get('conn_speed', '0')) / 100}K[/bold grey50]",
             ppp_user,
             ppp_pass,
+            str(mtu),
+            mac,
+            dns1,
+            dns2,
         )
     console.print(table)
 
@@ -264,16 +297,270 @@ def print_wps_info():
 def print_connected_devices():
     data = fetch_router_data("routerState")
 
-    table = Table(title="Connected Devices (ARP List)")
+    table = Table(title="Connected Devices (ARP List)", show_lines=True)
     table.add_column("IP Address", style="green")
     table.add_column("MAC Address", style="cyan")
     table.add_column("Hostname", style="yellow")
+    table.add_column("Speed Limit", justify="center")
 
     for dev in data.get("arpList", []):
         hostname = b64dec(dev.get("arp_host_name", ""))
-        table.add_row(dev.get("arp_ip"), dev.get("arp_mac"), hostname)
+        qos_idx = dev.get("is_qos_idx", "0")
+        if qos_idx != "0":
+            down = dev.get("qos_down_limit", "0")
+            up = dev.get("qos_up_limit", "0")
+            if down == "0" and up == "0":
+                speed_text = "[bold yellow]Rule assigned[/bold yellow]"
+            else:
+                speed_text = f"[bold yellow]D:{down} U:{up}[/bold yellow]"
+        else:
+            speed_text = "[grey50]Unlimited[/grey50]"
+        table.add_row(dev.get("arp_ip"), dev.get("arp_mac"), hostname, speed_text)
 
     console.print(table)
+
+
+def print_mac_filter_info():
+    data = fetch_router_data("routerState", "host_list.html")
+    filters = data.get("macFilterList", [])
+    blocked = [f for f in filters if f.get("rule") == "0"]
+
+    if not blocked:
+        console.print("[bold yellow]No devices are currently blocked.[/bold yellow]")
+        return
+
+    table = Table(
+        title=f"Blocked Devices (MAC Filter) — {len(blocked)} device(s)",
+        show_lines=True,
+    )
+    table.add_column("ID", style="cyan")
+    table.add_column("MAC Address", style="magenta")
+    table.add_column("Device Name", style="yellow")
+    table.add_column("Days", style="green")
+    table.add_column("Time", style="blue")
+    for f in blocked:
+        table.add_row(
+            f.get("id", "N/A"),
+            f.get("macAddr", "N/A"),
+            b64dec(f.get("comment", "")),
+            f.get("day", "N/A"),
+            f.get("time", "N/A"),
+        )
+    console.print(table)
+
+
+def add_mac_filter(mac_addr, comment=""):
+    """Block a device by MAC address."""
+    headers_mac = HEADERS.copy()
+    headers_mac["Referer"] = f"http://{ROUTER_IP}/host_list.html"
+    payload = {
+        "comment": b64enc(comment),
+        "id": "0",
+        "rule": "0",
+        "macAddr": mac_addr,
+        "day": "127",
+        "time": "all",
+        "macFilterList": "add",
+        "app": "mac_filter",
+        "wl_link": "0",
+    }
+    try:
+        url = f"{BASE_URL}/skk_set.cgi"
+        res = requests.post(url, headers=headers_mac, data=payload, timeout=5)
+        debug_req("POST", url, payload, res.status_code, res.text)
+        if res.status_code == 200 or res.status_code == 504:
+            return True
+    except RequestException as e:
+        debug_req("POST", url, payload, "EXCEPTION", str(e))
+        return True
+    return False
+
+
+def remove_mac_filter(entry_id, mac_addr):
+    """Remove a device from the MAC filter."""
+    headers_mac = HEADERS.copy()
+    headers_mac["Referer"] = f"http://{ROUTER_IP}/host_list.html"
+    payload = {
+        "macFilterList": "del",
+        "id": str(entry_id),
+        "macAddr": mac_addr,
+        "app": "mac_filter",
+        "wl_link": "0",
+    }
+    try:
+        url = f"{BASE_URL}/skk_set.cgi"
+        res = requests.post(url, headers=headers_mac, data=payload, timeout=5)
+        debug_req("POST", url, payload, res.status_code, res.text)
+        if res.status_code == 200 or res.status_code == 504:
+            return True
+    except RequestException as e:
+        debug_req("POST", url, payload, "EXCEPTION", str(e))
+        return True
+    return False
+
+
+def print_qos_info():
+    """Display all QoS speed-limited devices."""
+    data = fetch_router_data("qos", "host_list.html")
+    entries = data.get("qosList", [])
+
+    if not entries:
+        console.print("[bold yellow]No speed-limited devices configured.[/bold yellow]")
+        return
+
+    table = Table(
+        title=f"Speed Limited Devices (QoS) — {len(entries)} device(s)", show_lines=True
+    )
+    table.add_column("ID", style="cyan")
+    table.add_column("MAC Address", style="magenta")
+    table.add_column("Device Name", style="yellow")
+    table.add_column("Download (KB/s)", justify="right", style="green")
+    table.add_column("Upload (KB/s)", justify="right", style="green")
+    for e in entries:
+        down = e.get("rate_down", "0")
+        up = e.get("rate_up", "0")
+        down_text = down if down != "0" else "[grey50]Unlimited[/grey50]"
+        up_text = up if up != "0" else "[grey50]Unlimited[/grey50]"
+        table.add_row(
+            e.get("id", "N/A"),
+            e.get("macAddr", "N/A"),
+            b64dec(e.get("comment", "")),
+            down_text,
+            up_text,
+        )
+    console.print(table)
+
+
+def add_qos_rule(mac_addr, comment="", rate_down=0, rate_up=0):
+    """Add or update a QoS speed limit rule."""
+    headers_qos = HEADERS.copy()
+    headers_qos["Referer"] = f"http://{ROUTER_IP}/host_list.html"
+    payload = {
+        "qosList": "mod",
+        "id": "0",
+        "macAddr": mac_addr,
+        "comment": b64enc(comment),
+        "rate_up": str(rate_up),
+        "rate_down": str(rate_down),
+        "ceil_up": str(rate_up),
+        "ceil_down": str(rate_down),
+        "app": "qos",
+        "wl_link": "0",
+    }
+    try:
+        url = f"{BASE_URL}/skk_set.cgi"
+        res = requests.post(url, headers=headers_qos, data=payload, timeout=5)
+        debug_req("POST", url, payload, res.status_code, res.text)
+        if res.status_code == 200 or res.status_code == 504:
+            return True
+    except RequestException as e:
+        debug_req("POST", url, payload, "EXCEPTION", str(e))
+        return True
+    return False
+
+
+def remove_qos_rule(entry_id, mac_addr):
+    """Remove a QoS speed limit rule."""
+    headers_qos = HEADERS.copy()
+    headers_qos["Referer"] = f"http://{ROUTER_IP}/host_list.html"
+    payload = {
+        "qosList": "del",
+        "id": str(entry_id),
+        "macAddr": mac_addr,
+        "comment": "",
+        "app": "qos",
+        "wl_link": "0",
+    }
+    try:
+        url = f"{BASE_URL}/skk_set.cgi"
+        res = requests.post(url, headers=headers_qos, data=payload, timeout=5)
+        debug_req("POST", url, payload, res.status_code, res.text)
+        if res.status_code == 200 or res.status_code == 504:
+            return True
+    except RequestException as e:
+        debug_req("POST", url, payload, "EXCEPTION", str(e))
+        return True
+    return False
+
+
+def update_wan_settings(
+    wan_id="1",
+    username=None,
+    password=None,
+    mtu=None,
+    mac=None,
+    dns1=None,
+    dns2=None,
+):
+    """Update WAN/PPPoE settings via skk_set.cgi (two-step process)."""
+    headers_step1 = HEADERS.copy()
+    headers_step1["Referer"] = f"http://{ROUTER_IP}/wan_setup.html"
+
+    # Step 1: interface_mode save
+    payload1 = {
+        "wanPortMode": "",
+        "wanPortMode_set": "save",
+        "app": "interface_mode",
+        "wl_link": "0",
+    }
+
+    try:
+        url = f"{BASE_URL}/skk_set.cgi"
+        res1 = requests.post(url, headers=headers_step1, data=payload1, timeout=5)
+        debug_req("POST", url, payload1, res1.status_code, res1.text)
+    except RequestException as e:
+        debug_req("POST", f"{BASE_URL}/skk_set.cgi", payload1, "EXCEPTION", str(e))
+
+    # Step 2: fetch current state to fill missing fields
+    data = fetch_router_data("wan_lan", "wan_setup.html")
+    current = next((w for w in data.get("wan", []) if w.get("id") == str(wan_id)), {})
+
+    final_username = (
+        b64enc(username) if username is not None else current.get("pppUsername", "")
+    )
+    final_password = (
+        b64enc(password) if password is not None else current.get("pppPassword", "")
+    )
+    final_mtu = str(mtu) if mtu is not None else current.get("pppMtu", "1492")
+    final_mac = mac if mac is not None else current.get("mac", "")
+    final_dns1 = dns1 if dns1 is not None else current.get("dns1", "")
+    final_dns2 = dns2 if dns2 is not None else current.get("dns2", "")
+    conn_type = current.get("connType", "0")
+    wan_type = current.get("type", "2")
+    dhcp_val = current.get("dhcp", "2")
+
+    payload2 = {
+        "mode_name": "skk_set",
+        "wan": "mod",
+        "id": str(wan_id),
+        "ifIndex": "1",
+        "app": "wan",
+        "wl_link": "0",
+        "type": str(wan_type),
+        "dhcp": str(dhcp_val),
+        "connType": str(conn_type),
+        "pppUsername": str(final_username),
+        "pppPassword": str(final_password),
+        "pppMtu": str(final_mtu),
+        "acName": "",
+        "servName": "",
+        "mac": final_mac,
+        "dnsMode": "0",
+        "dns1": final_dns1,
+        "dns2": final_dns2,
+    }
+
+    try:
+        url = f"{BASE_URL}/skk_set.cgi"
+        res = requests.post(url, headers=headers_step1, data=payload2, timeout=15)
+        debug_req("POST", url, payload2, res.status_code, res.text)
+        if res.status_code == 200 or res.status_code == 504:
+            return True
+    except RequestException as e:
+        debug_req("POST", f"{BASE_URL}/skk_set.cgi", payload2, "EXCEPTION", str(e))
+        return True
+
+    return False
 
 
 def reboot_system():
@@ -285,12 +572,13 @@ def reboot_system():
     }
 
     try:
-        res = requests.post(
-            f"{BASE_URL}/skk_set.cgi", headers=HEADERS, data=payload, timeout=5
-        )
+        url = f"{BASE_URL}/skk_set.cgi"
+        res = requests.post(url, headers=HEADERS, data=payload, timeout=5)
+        debug_req("POST", url, payload, res.status_code, res.text)
         if res.status_code == 200 or res.status_code == 504:
             return True
-    except RequestException:
+    except RequestException as e:
+        debug_req("POST", url, payload, "EXCEPTION", str(e))
         return True
 
     return False
@@ -307,15 +595,32 @@ def interactive_menu():
         console.print("3. Internet/WAN Info")
         console.print("4. Wi-Fi (WLAN) Info")
         console.print("5. Connected Devices")
-        console.print("6. WPS Audit")
-        console.print("7. Update Wi-Fi Settings")
-        console.print("8. Update Admin Password")
-        console.print("9. Reboot")
-        console.print("10. Exit")
+        console.print("6. Speed Limit (QoS)")
+        console.print("7. MAC Filter (Blocked Devices)")
+        console.print("8. WPS Audit")
+        console.print("9. Update Wi-Fi Settings")
+        console.print("10. Update Admin Password")
+        console.print("11. Update WAN/PPPoE Settings")
+        console.print("12. Reboot")
+        console.print("13. Exit")
 
         choice = Prompt.ask(
             "\nSelect an option",
-            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+            choices=[
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "10",
+                "11",
+                "12",
+                "13",
+            ],
             default="1",
         )
 
@@ -324,6 +629,7 @@ def interactive_menu():
             print_internet_info()
             print_wlan_info()
             print_connected_devices()
+            print_mac_filter_info()
             print_wps_info()
         elif choice == "2":
             print_router_info()
@@ -334,15 +640,163 @@ def interactive_menu():
         elif choice == "5":
             print_connected_devices()
         elif choice == "6":
-            print_wps_info()
+            interactive_qos()
         elif choice == "7":
-            interactive_wlan_update()
+            interactive_mac_filter()
         elif choice == "8":
-            interactive_password_update()
+            print_wps_info()
         elif choice == "9":
-            interactive_reboot()
+            interactive_wlan_update()
         elif choice == "10":
+            interactive_password_update()
+        elif choice == "11":
+            interactive_wan_update()
+        elif choice == "12":
+            interactive_reboot()
+        elif choice == "13":
             console.print("[bold green]Goodbye![/bold green]")
+            break
+
+
+def interactive_wan_update():
+    print_internet_info()
+    console.print(
+        "[italic grey50](Leave fields empty to keep current settings)[/italic grey50]"
+    )
+    wan_id = Prompt.ask("WAN ID", default="1")
+    mtu = Prompt.ask("MTU (e.g. 1492)")
+    mac = Prompt.ask("MAC Address (e.g. 88:bd:09:ae:10:56)")
+    dns1 = Prompt.ask("Primary DNS")
+    dns2 = Prompt.ask("Secondary DNS")
+    username = Prompt.ask("PPPoE Username")
+    password = Prompt.ask("PPPoE Password")
+
+    mtu = int(mtu) if mtu else None
+    mac = mac if mac else None
+    dns1 = dns1 if dns1 else None
+    dns2 = dns2 if dns2 else None
+    username = username if username else None
+    password = password if password else None
+
+    if Confirm.ask("Are you sure you want to update WAN settings?"):
+        with console.status(
+            "[bold green]Updating WAN settings (this may take a few seconds)..."
+        ):
+            success = update_wan_settings(
+                wan_id=wan_id,
+                username=username,
+                password=password,
+                mtu=mtu,
+                mac=mac,
+                dns1=dns1,
+                dns2=dns2,
+            )
+
+        if success:
+            console.print(
+                "[bold green]✅ WAN settings updated successfully![/bold green]"
+            )
+            print_internet_info()
+        else:
+            console.print("[bold red]❌ Failed to update WAN settings.[/bold red]")
+
+
+def interactive_mac_filter():
+    while True:
+        console.print(
+            "\n[bold magenta]=== MAC Filter (Blocked Devices) ===[/bold magenta]"
+        )
+        console.print("1. Show Blocked Devices")
+        console.print("2. Block a Device")
+        console.print("3. Unblock a Device")
+        console.print("4. Back to Main Menu")
+
+        sub = Prompt.ask(
+            "Select an option",
+            choices=["1", "2", "3", "4"],
+            default="1",
+        )
+
+        if sub == "1":
+            print_mac_filter_info()
+        elif sub == "2":
+            mac = Prompt.ask("MAC Address to block (e.g. aa:bb:cc:dd:ee:ff)")
+            comment = Prompt.ask("Device name (optional)")
+            if Confirm.ask(f"Block {mac}?"):
+                with console.status("[bold green]Blocking device..."):
+                    success = add_mac_filter(mac, comment)
+                if success:
+                    console.print("[bold green]✅ Device blocked![/bold green]")
+                    print_mac_filter_info()
+                else:
+                    console.print("[bold red]❌ Failed to block device.[/bold red]")
+        elif sub == "3":
+            print_mac_filter_info()
+            eid = Prompt.ask("Enter the ID of the device to unblock")
+            mac = Prompt.ask("Enter the MAC address")
+            if Confirm.ask(f"Unblock device ID {eid}?"):
+                with console.status("[bold green]Unblocking device..."):
+                    success = remove_mac_filter(eid, mac)
+                if success:
+                    console.print("[bold green]✅ Device unblocked![/bold green]")
+                    print_mac_filter_info()
+                else:
+                    console.print("[bold red]❌ Failed to unblock device.[/bold red]")
+        elif sub == "4":
+            break
+
+
+def interactive_qos():
+    while True:
+        console.print("\n[bold magenta]=== Speed Limit (QoS) ===[/bold magenta]")
+        console.print("1. Show Speed Limited Devices")
+        console.print("2. Set Speed Limit")
+        console.print("3. Remove Speed Limit")
+        console.print("4. Back to Main Menu")
+
+        sub = Prompt.ask(
+            "Select an option",
+            choices=["1", "2", "3", "4"],
+            default="1",
+        )
+
+        if sub == "1":
+            print_qos_info()
+        elif sub == "2":
+            print_connected_devices()
+            mac = Prompt.ask("MAC Address (e.g. aa:bb:cc:dd:ee:ff)")
+            name = Prompt.ask("Device name (optional)")
+            rate_down = Prompt.ask(
+                "Download limit in KB/s (0 = unlimited)", default="0"
+            )
+            rate_up = Prompt.ask("Upload limit in KB/s (0 = unlimited)", default="0")
+            if Confirm.ask(
+                f"Set speed limit for {mac}? (D:{rate_down} U:{rate_up} KB/s)"
+            ):
+                with console.status("[bold green]Applying speed limit..."):
+                    success = add_qos_rule(mac, name, int(rate_down), int(rate_up))
+                if success:
+                    console.print("[bold green]✅ Speed limit applied![/bold green]")
+                    print_qos_info()
+                else:
+                    console.print(
+                        "[bold red]❌ Failed to apply speed limit.[/bold red]"
+                    )
+        elif sub == "3":
+            print_qos_info()
+            eid = Prompt.ask("Enter the ID of the rule to remove")
+            mac = Prompt.ask("Enter the MAC address")
+            if Confirm.ask(f"Remove speed limit for {mac}?"):
+                with console.status("[bold green]Removing speed limit..."):
+                    success = remove_qos_rule(eid, mac)
+                if success:
+                    console.print("[bold green]✅ Speed limit removed![/bold green]")
+                    print_qos_info()
+                else:
+                    console.print(
+                        "[bold red]❌ Failed to remove speed limit.[/bold red]"
+                    )
+        elif sub == "4":
             break
 
 
@@ -445,9 +899,52 @@ def main():
         "--devices-info", action="store_true", help="Print connected devices (ARP)"
     )
     parser.add_argument(
+        "--mac-filter-info",
+        action="store_true",
+        help="Print blocked devices (MAC filter)",
+    )
+    parser.add_argument(
+        "--qos-info", action="store_true", help="Print speed limited devices (QoS)"
+    )
+    parser.add_argument(
         "--admin-password", type=str, help="New Password for the admin panel"
     )
     parser.add_argument("--reboot", action="store_true", help="Reboot the router")
+    parser.add_argument(
+        "--mac-filter-add",
+        type=str,
+        metavar="MAC",
+        help="Block a device by MAC address",
+    )
+    parser.add_argument(
+        "--mac-filter-name", type=str, help="Device name for --mac-filter-add"
+    )
+    parser.add_argument(
+        "--mac-filter-del", type=str, metavar="ID", help="Unblock a device by filter ID"
+    )
+    parser.add_argument(
+        "--mac-filter-del-mac", type=str, help="MAC address for --mac-filter-del"
+    )
+    parser.add_argument(
+        "--qos-set", type=str, metavar="MAC", help="Set speed limit for a MAC address"
+    )
+    parser.add_argument("--qos-name", type=str, help="Device name for --qos-set")
+    parser.add_argument(
+        "--qos-rate-down",
+        type=int,
+        metavar="KB",
+        help="Download limit in KB/s (0=unlimited)",
+    )
+    parser.add_argument(
+        "--qos-rate-up",
+        type=int,
+        metavar="KB",
+        help="Upload limit in KB/s (0=unlimited)",
+    )
+    parser.add_argument(
+        "--qos-del", type=str, metavar="ID", help="Remove speed limit rule by ID"
+    )
+    parser.add_argument("--qos-del-mac", type=str, help="MAC address for --qos-del")
 
     # Mutation Flags
     parser.add_argument(
@@ -466,6 +963,27 @@ def main():
         "--broad", type=int, choices=[0, 1], help="1 for Visible, 0 for Hidden"
     )
 
+    # WAN/PPPoE Settings
+    parser.add_argument(
+        "--wan-set", type=str, metavar="ID", help="Update WAN/PPPoE settings by ID"
+    )
+    parser.add_argument("--wan-username", type=str, help="New PPPoE username")
+    parser.add_argument("--wan-password", type=str, help="New PPPoE password")
+    parser.add_argument(
+        "--wan-mtu", type=int, metavar="MTU", help="PPPoE MTU (e.g. 1492)"
+    )
+    parser.add_argument(
+        "--wan-mac", type=str, help="WAN MAC address (e.g. 88:bd:09:ae:10:56)"
+    )
+    parser.add_argument("--wan-dns1", type=str, help="Primary DNS server")
+    parser.add_argument("--wan-dns2", type=str, help="Secondary DNS server")
+
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print outgoing/incoming payloads and status codes",
+    )
+
     # Mutually Exclusive enable/disable
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -480,6 +998,10 @@ def main():
     # Determine if any CLI flags were used
     action_taken = False
 
+    global DEBUG
+    if args.debug:
+        DEBUG = True
+
     if args.router is not None:
         ROUTER_IP = args.router
         BASE_URL = f"http://{ROUTER_IP}/cgi-bin"
@@ -489,6 +1011,8 @@ def main():
         print_internet_info()
         print_wlan_info()
         print_connected_devices()
+        print_mac_filter_info()
+        print_qos_info()
         print_wps_info()
         action_taken = True
     else:
@@ -503,6 +1027,12 @@ def main():
             action_taken = True
         if args.devices_info:
             print_connected_devices()
+            action_taken = True
+        if args.mac_filter_info:
+            print_mac_filter_info()
+            action_taken = True
+        if args.qos_info:
+            print_qos_info()
             action_taken = True
 
     # Handle Set Command
@@ -529,9 +1059,74 @@ def main():
         else:
             console.print("[bold red]❌ Update failed.[/bold red]")
 
+    if args.wan_set is not None:
+        action_taken = True
+        console.print(f"[yellow]Attempting to update WAN ID {args.wan_set}...[/yellow]")
+        success = update_wan_settings(
+            wan_id=args.wan_set,
+            username=args.wan_username,
+            password=args.wan_password,
+            mtu=args.wan_mtu,
+            mac=args.wan_mac,
+            dns1=args.wan_dns1,
+            dns2=args.wan_dns2,
+        )
+        if success:
+            console.print(
+                "[bold green]✅ WAN settings updated successfully![/bold green]"
+            )
+        else:
+            console.print("[bold red]❌ Update failed.[/bold red]")
+
     if args.admin_password is not None:
         action_taken = True
         update_admin_password(args.admin_password)
+
+    if args.mac_filter_add is not None:
+        action_taken = True
+        name = args.mac_filter_name or ""
+        console.print(f"[yellow]Blocking {args.mac_filter_add}...[/yellow]")
+        success = add_mac_filter(args.mac_filter_add, name)
+        if success:
+            console.print("[bold green]✅ Device blocked![/bold green]")
+        else:
+            console.print("[bold red]❌ Failed to block device.[/bold red]")
+
+    if args.mac_filter_del is not None:
+        action_taken = True
+        mac = args.mac_filter_del_mac or ""
+        console.print(f"[yellow]Unblocking filter ID {args.mac_filter_del}...[/yellow]")
+        success = remove_mac_filter(args.mac_filter_del, mac)
+        if success:
+            console.print("[bold green]✅ Device unblocked![/bold green]")
+        else:
+            console.print("[bold red]❌ Failed to unblock device.[/bold red]")
+
+    if args.qos_set is not None:
+        action_taken = True
+        name = args.qos_name or ""
+        rate_down = args.qos_rate_down or 0
+        rate_up = args.qos_rate_up or 0
+        console.print(
+            f"[yellow]Setting speed limit for {args.qos_set} (D:{rate_down} U:{rate_up} KB/s)...[/yellow]"
+        )
+        success = add_qos_rule(args.qos_set, name, rate_down, rate_up)
+        if success:
+            console.print("[bold green]✅ Speed limit applied![/bold green]")
+        else:
+            console.print("[bold red]❌ Failed to apply speed limit.[/bold red]")
+
+    if args.qos_del is not None:
+        action_taken = True
+        mac = args.qos_del_mac or ""
+        console.print(
+            f"[yellow]Removing speed limit rule ID {args.qos_del}...[/yellow]"
+        )
+        success = remove_qos_rule(args.qos_del, mac)
+        if success:
+            console.print("[bold green]✅ Speed limit removed![/bold green]")
+        else:
+            console.print("[bold red]❌ Failed to remove speed limit.[/bold red]")
 
     if args.reboot:
         action_taken = True
