@@ -17,7 +17,8 @@ dependencies = [
   "rich~=14.3.3",
   "yt-dlp[default]~=2026.3.17",
   "ytmusicapi~=1.11.5",
-  "pyrotgcrypto~=1.2.7"
+  "pyrotgcrypto~=1.2.7",
+  "tgram~=2.0.4"
 ]
 
 [project.urls]
@@ -33,7 +34,7 @@ netis = "netis:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-py-modules = ["ytm_dl", "tg_uploader", "subtitle_extractor"]
+py-modules = ["ytm_dl", "tg_uploader", "subtitle_extractor", "netis"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

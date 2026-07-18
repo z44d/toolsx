@@ -283,6 +283,13 @@ def print_upload_plan(config: UploadConfig) -> None:
     )
 
 
+FIFTY_MB = 50 * 1024 * 1024
+
+
+def _msg_id(msg: object) -> int:
+    return msg.message_id if hasattr(msg, "message_id") else msg.id
+
+
 async def send_document_with_retry(
     app: object, config: UploadConfig, file_path: Path, debug: bool
 ) -> object:
@@ -329,29 +336,51 @@ async def send_document_with_retry(
             await asyncio.sleep(wait_seconds)
 
 
+async def send_document_with_tgram(
+    config: UploadConfig, file_path: Path, debug: bool
+) -> object:
+    from tgram import TgBot
+
+    debug_log(debug, f"tgram: sending {file_path} to {config.chat_id}")
+    bot = TgBot(config.bot_token)
+    return await bot.send_document(
+        chat_id=config.chat_id,
+        document=file_path,
+        caption=config.caption,
+    )
+
+
 async def upload_files(config: UploadConfig, debug: bool) -> None:
-    Client = importlib.import_module("pyrogram").Client
+    needs_pyrogram = any(
+        file_path.stat().st_size >= FIFTY_MB for file_path in config.file_paths
+    )
 
     print_upload_plan(config)
     console.print(f"[cyan]Found {len(config.file_paths)} file(s) to upload.[/]")
-    console.print("[dim]Connecting to Telegram...[/]")
-    debug_log(
-        debug,
-        f"Preparing Telegram client for chat={config.chat_id!r} files={[str(path) for path in config.file_paths]!r}",
-    )
 
-    app = Client(
-        name="toolsx_tg_uploader",
-        api_id=config.api_id,
-        api_hash=config.api_hash,
-        bot_token=config.bot_token,
-        in_memory=True,
-        no_updates=True,
-    )
+    py_app = None
+    if needs_pyrogram:
+        Client = importlib.import_module("pyrogram").Client
+        console.print("[dim]Connecting to Telegram (MTProto) for files ≥ 50 MB...[/]")
+        debug_log(
+            debug,
+            f"Preparing pyrogram client for chat={config.chat_id!r}",
+        )
+        py_app = Client(
+            name="toolsx_tg_uploader",
+            api_id=config.api_id,
+            api_hash=config.api_hash,
+            bot_token=config.bot_token,
+            in_memory=True,
+            no_updates=True,
+        )
 
-    async with app:
-        debug_log(debug, "Opening Telegram session")
-        me = await app.get_me()
+    async def _init_pyrogram() -> None:
+        nonlocal py_app
+        if py_app is None:
+            return
+        await py_app.start()
+        me = await py_app.get_me()
         username = f"@{me.username}" if me.username else "none"
         debug_log(debug, f"Authenticated as bot id={me.id} username={username}")
         console.print(
@@ -364,37 +393,46 @@ async def upload_files(config: UploadConfig, debug: bool) -> None:
             )
         )
 
-        message = None
-        total_files = len(config.file_paths)
-        for index, file_path in enumerate(config.file_paths, start=1):
-            console.print(
-                f"[bold cyan]Uploading file {index}/{total_files}:[/] {file_path.name}"
-            )
-            debug_log(
-                debug,
-                f"Sending document to Telegram: {str(file_path)!r}",
-            )
-            message = await send_document_with_retry(app, config, file_path, debug)
-            debug_log(
-                debug,
-                f"Upload finished with message id={message.id if message else 'none'}",
-            )
+    if needs_pyrogram:
+        await _init_pyrogram()
 
-            console.print(
-                Panel(
-                    f"[green]File:[/] {file_path.name}\n"
-                    f"[green]Message ID:[/] {message.id}\n[cyan]Chat ID:[/] {message.chat.id}",
-                    title=f"Upload Complete ({index}/{total_files})",
-                    border_style="bright_green",
-                )
-            )
+    message = None
+    total_files = len(config.file_paths)
+    for index, file_path in enumerate(config.file_paths, start=1):
+        file_size = file_path.stat().st_size
+        console.print(
+            f"[bold cyan]Uploading file {index}/{total_files}:[/] {file_path.name} "
+            f"([dim]{format_bytes(file_size)}[/])"
+        )
+        debug_log(debug, f"Sending document to Telegram: {str(file_path)!r}")
 
-            if index < total_files:
-                console.print("[dim]Sleeping 3 seconds before the next file...[/]")
-                await asyncio.sleep(3)
+        if file_size < FIFTY_MB:
+            message = await send_document_with_tgram(config, file_path, debug)
+        else:
+            message = await send_document_with_retry(py_app, config, file_path, debug)
+
+        msg_id = _msg_id(message) if message else "none"
+        debug_log(debug, f"Upload finished with message id={msg_id}")
+
+        console.print(
+            Panel(
+                f"[green]File:[/] {file_path.name}\n"
+                f"[green]Message ID:[/] {msg_id}\n"
+                f"[cyan]Chat ID:[/] {message.chat.id}",
+                title=f"Upload Complete ({index}/{total_files})",
+                border_style="bright_green",
+            )
+        )
+
+        if index < total_files:
+            console.print("[dim]Sleeping 3 seconds before the next file...[/]")
+            await asyncio.sleep(3)
 
     if message is None:
         raise RuntimeError("Upload stopped before completion.")
+
+    if py_app is not None:
+        await py_app.stop()
 
 
 async def async_main(argv: Optional[Sequence[str]] = None) -> int:
@@ -412,9 +450,9 @@ async def async_main(argv: Optional[Sequence[str]] = None) -> int:
         await upload_files(config, args.debug)
         return 0
     except ModuleNotFoundError as error:
-        if error.name == "pyrogram":
+        if error.name in ("pyrogram", "tgram"):
             console.print(
-                "[red]Pyrogram is not installed. Run `pip install -r requirements.txt`.[/]"
+                f"[red]{error.name} is not installed. Run `pip install -r requirements.txt`.[/]"
             )
             return 1
         console.print(f"[red]Unexpected error:[/] {error}")
@@ -426,8 +464,9 @@ async def async_main(argv: Optional[Sequence[str]] = None) -> int:
         console.print("[yellow]Upload cancelled by user.[/]")
         return 130
     except Exception as error:
-        if error.__class__.__module__.startswith("pyrogram"):
-            console.print(f"[red]Telegram RPC error:[/] {error}")
+        mod = getattr(error, "__class__", object).__module__ or ""
+        if mod.startswith(("pyrogram", "tgram")):
+            console.print(f"[red]Telegram API error:[/] {error}")
             return 1
         console.print(f"[red]Unexpected error:[/] {error}")
         return 1
